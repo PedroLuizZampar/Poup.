@@ -25,6 +25,8 @@ import type {
   ChangePasswordRequest,
   PluggyCredentialsDTO,
   RegisterInput,
+  SuggestionDTO,
+  SimilarTransactionsResponse,
 } from "@poup/shared";
 
 /**
@@ -405,4 +407,52 @@ export async function updateItemImage(id: string, imageUrl: string | null): Prom
     body: JSON.stringify({ imageUrl }),
   });
   return res.item;
+}
+
+// ==========================================
+// SUGESTÕES DE CATEGORIA
+// ==========================================
+export async function fetchSuggestions(): Promise<{
+  suggestions: SuggestionDTO[];
+  count: number;
+}> {
+  return request("/suggestions");
+}
+
+export async function fetchSuggestionsCount(): Promise<number> {
+  const data = await request<{ count: number }>("/suggestions/count");
+  return data.count;
+}
+
+export async function acceptSuggestion(
+  id: string,
+  categoryId?: string
+): Promise<{ transaction: TransactionDTO; remaining: number }> {
+  return request(`/suggestions/${id}/accept`, {
+    method: "POST",
+    body: JSON.stringify(categoryId ? { categoryId } : {}),
+  });
+}
+
+export async function dismissSuggestion(id: string): Promise<{ remaining: number }> {
+  return request(`/suggestions/${id}/dismiss`, { method: "POST" });
+}
+
+export async function fetchSimilarTransactions(
+  transactionId: string,
+  categoryId: string
+): Promise<SimilarTransactionsResponse> {
+  return request(
+    `/transactions/${transactionId}/similar?categoryId=${encodeURIComponent(categoryId)}`
+  );
+}
+
+export async function bulkCategorize(
+  transactionIds: string[],
+  categoryId: string
+): Promise<{ updated: number }> {
+  return request("/transactions/bulk-categorize", {
+    method: "POST",
+    body: JSON.stringify({ transactionIds, categoryId }),
+  });
 }

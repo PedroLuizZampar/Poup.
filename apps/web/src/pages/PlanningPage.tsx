@@ -28,7 +28,8 @@ export function PlanningPage() {
       ]);
       setBudgets(bData);
       setGoals(gData);
-      setCategories(cData);
+      // Categoria de sistema não aceita orçamento — o servidor recusa.
+      setCategories(cData.filter((c) => !c.systemKey));
       setAccounts(aData);
     } catch (err) {
       console.error("Erro ao carregar dados de planejamento:", err);

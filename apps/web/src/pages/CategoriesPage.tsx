@@ -51,7 +51,9 @@ export function CategoriesPage() {
         fetchTransactions({ month: currentMonthStr }),
         fetchBudgets(currentMonthStr).catch(() => []),
       ]);
-      setCategories(cats);
+      // As de sistema o Poup mantém sozinho: não se editam, não se excluem e
+      // não recebem orçamento, então não têm o que fazer nesta grade.
+      setCategories(cats.filter((c) => !c.systemKey));
       setTransactions(txs);
       setBudgets(bdgs);
     } catch (err: any) {

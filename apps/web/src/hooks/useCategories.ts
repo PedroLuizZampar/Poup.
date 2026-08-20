@@ -22,7 +22,10 @@ export function useCategoryMap(categories: CategoryDTO[]): CategoryMap {
 }
 
 export interface UseCategoriesResult {
+  /** Só as selecionáveis: é o que todo seletor quer mostrar. */
   categories: CategoryDTO[];
+  /** Todas, inclusive as de sistema — para desenhar o chip de uma transação. */
+  allCategories: CategoryDTO[];
   categoryMap: CategoryMap;
   loading: boolean;
   /** Recarrega do servidor — use depois de criar, editar ou excluir. */
@@ -51,5 +54,15 @@ export function useCategories(): UseCategoriesResult {
     void reload();
   }, [reload]);
 
-  return { categories, categoryMap: useCategoryMap(categories), loading, reload };
+  // O mapa continua com todas: a lista de transações precisa saber desenhar
+  // "Transferência entre contas", que nenhum seletor deve oferecer.
+  const selectable = useMemo(() => categories.filter((c) => !c.systemKey), [categories]);
+
+  return {
+    categories: selectable,
+    allCategories: categories,
+    categoryMap: useCategoryMap(categories),
+    loading,
+    reload,
+  };
 }

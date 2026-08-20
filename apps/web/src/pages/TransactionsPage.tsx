@@ -78,6 +78,12 @@ export function TransactionsPage() {
   }, [debouncedSearch, typeFilter, categoryFilter, accountFilter]);
 
   const categoryMap = useCategoryMap(categories);
+  // O mapa precisa de todas para desenhar o chip "Transferência entre contas";
+  // nenhum seletor deve oferecê-la.
+  const selectableCategories = useMemo(
+    () => categories.filter((c) => !c.systemKey),
+    [categories]
+  );
 
   // Opções para o Select de Categorias
   const categoryOptions = useMemo(() => {
@@ -85,12 +91,12 @@ export function TransactionsPage() {
       { value: "ALL", label: "Todas as categorias" },
       { value: "UNCATEGORIZED", label: "Sem categoria" },
     ];
-    const items = categories.map((c) => ({
+    const items = selectableCategories.map((c) => ({
       value: c.id,
       label: c.name,
     }));
     return [...base, ...items];
-  }, [categories]);
+  }, [selectableCategories]);
 
   // Opções para o Select de Contas
   const accountOptions = useMemo(() => {
@@ -540,7 +546,7 @@ export function TransactionsPage() {
       {/* Modal Detalhe de Transação */}
       <TransactionDetailModal
         transaction={selectedTx}
-        categories={categories}
+        categories={selectableCategories}
         onClose={() => setSelectedTx(null)}
         onUpdated={(updated) => {
           setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
