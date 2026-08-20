@@ -1,4 +1,4 @@
-import React, { useState, useEffect, FormEvent } from "react";
+import React, { useState, useEffect, useMemo, FormEvent } from "react";
 import type { TransactionDTO, CategoryDTO } from "@poup/shared";
 import { updateTransaction } from "../../lib/api";
 import { Modal } from "../ui/Modal";
@@ -7,12 +7,14 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { CategoryTile } from "../ui/CategoryTile";
 import { CategorySelectModal } from "../categories/CategorySelectModal";
+import { SimilarTransactionsModal } from "./SimilarTransactionsModal";
 import { useToast } from "../ui/Toast";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { useCategoryMap } from "../../hooks/useCategories";
 
 interface TransactionDetailModalProps {
   transaction: TransactionDTO | null;
+  /** Todas, inclusive as de sistema: o seletor filtra, a exibição precisa. */
   categories: CategoryDTO[];
   onClose: () => void;
   onUpdated: (updated: TransactionDTO) => void;
@@ -28,6 +30,8 @@ export function TransactionDetailModal({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  /** Categoria recém-aplicada, quando vale oferecer repeti-la nas parecidas. */
+  const [similarFor, setSimilarFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const toast = useToast();
 
@@ -40,6 +44,12 @@ export function TransactionDetailModal({
   }, [transaction]);
 
   const categoryMap = useCategoryMap(categories);
+  // O mapa fica com todas para saber desenhar "Transferência entre contas";
+  // o seletor recebe só o que o usuário pode escolher.
+  const selectableCategories = useMemo(
+    () => categories.filter((c) => !c.systemKey),
+    [categories]
+  );
 
   if (!transaction) return null;
 
@@ -56,6 +66,17 @@ export function TransactionDetailModal({
       });
       toast.success("Transação atualizada com sucesso.");
       onUpdated(updated);
+
+      // A categoria desta transação já está salva; o modal cuida só das outras.
+      // Só faz sentido quando a categoria de fato mudou para uma selecionável —
+      // repetir uma oculta em massa não é uma decisão, é um estado de espera.
+      const escolhida = categoryId ? categoryMap[categoryId] : null;
+      const mudou = Boolean(categoryId) && categoryId !== transaction.categoryId;
+      if (mudou && escolhida && !escolhida.systemKey) {
+        setSimilarFor(categoryId);
+        return;
+      }
+
       onClose();
     } catch (err: any) {
       toast.error(err.message || "Erro ao atualizar a transação.");
@@ -166,10 +187,23 @@ export function TransactionDetailModal({
             </span>
           </button>
 
-          <CategorySelectModal
+          {similarFor && (
+        <SimilarTransactionsModal
+          isOpen={true}
+          onClose={() => {
+            setSimilarFor(null);
+            onClose();
+          }}
+          transactionId={transaction.id}
+          categoryId={similarFor}
+          categoryMap={categoryMap}
+        />
+      )}
+
+      <CategorySelectModal
             isOpen={isCategoryModalOpen}
             onClose={() => setIsCategoryModalOpen(false)}
-            categories={categories}
+            categories={selectableCategories}
             selectedCategoryId={categoryId}
             onSelectCategory={setCategoryId}
           />

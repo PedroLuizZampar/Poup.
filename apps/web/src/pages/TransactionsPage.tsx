@@ -548,7 +548,7 @@ export function TransactionsPage() {
       {/* Modal Detalhe de Transação */}
       <TransactionDetailModal
         transaction={selectedTx}
-        categories={selectableCategories}
+        categories={categories}
         onClose={() => setSelectedTx(null)}
         onUpdated={(updated) => {
           setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
