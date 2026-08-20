@@ -1,5 +1,9 @@
 import { prisma } from "../../prisma";
-import { TransactionType as PrismaTransactionType, Prisma } from "@prisma/client";
+import {
+  TransactionType as PrismaTransactionType,
+  Prisma,
+  SystemCategoryKey,
+} from "@prisma/client";
 import type { TransactionDTO, TransactionType } from "@poup/shared";
 import {
   AccountNotFoundError,
@@ -101,7 +105,14 @@ export async function listTransactions(
   }
 
   if (filters.uncategorized) {
-    where.categoryId = null;
+    // "Sem categoria" deixou de ser ausência e virou um lugar: as duas ocultas.
+    const systemIds = await ensureSystemCategories(prisma, userId);
+    where.categoryId = {
+      in: [
+        systemIds[SystemCategoryKey.UNCATEGORIZED_EXPENSE],
+        systemIds[SystemCategoryKey.UNCATEGORIZED_INCOME],
+      ],
+    };
   } else if (filters.categoryId) {
     where.categoryId = filters.categoryId;
   }

@@ -1,5 +1,6 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, SystemCategoryKey } from "@prisma/client";
 import { prisma } from "../../prisma";
+import { ensureSystemCategories } from "../../lib/systemCategories";
 import type {
   ReportCategoryTotalDTO,
   ReportMonthTotalDTO,
@@ -89,10 +90,15 @@ function toCents(value: Prisma.Decimal | number | null | undefined): number {
   return Number(Number(value).toFixed(2));
 }
 
-async function totalsByType(userId: string, period: ResolvedPeriod) {
+/**
+ * Transferência entre contas do próprio usuário não é gasto nem receita: o
+ * dinheiro só mudou de bolso. Contá-la infla os dois lados do mesmo mês e
+ * estraga a taxa de poupança.
+ */
+async function totalsByType(userId: string, period: ResolvedPeriod, transferId: string) {
   const grouped = await prisma.transaction.groupBy({
     by: ["type"],
-    where: { userId, ...dateFilter(period) },
+    where: { userId, NOT: { categoryId: transferId }, ...dateFilter(period) },
     _sum: { amount: true },
     _count: { _all: true },
   });
@@ -119,11 +125,17 @@ async function totalsByType(userId: string, period: ResolvedPeriod) {
 async function expensesByCategory(
   userId: string,
   period: ResolvedPeriod,
-  totalExpense: number
+  totalExpense: number,
+  transferId: string
 ): Promise<ReportCategoryTotalDTO[]> {
   const grouped = await prisma.transaction.groupBy({
     by: ["categoryId"],
-    where: { userId, type: "EXPENSE", ...dateFilter(period) },
+    where: {
+      userId,
+      type: "EXPENSE",
+      NOT: { categoryId: transferId },
+      ...dateFilter(period),
+    },
     _sum: { amount: true },
     _count: { _all: true },
   });
@@ -172,7 +184,8 @@ interface MonthlyRow {
  */
 async function monthlySeries(
   userId: string,
-  months: string[]
+  months: string[],
+  transferId: string
 ): Promise<ReportMonthTotalDTO[]> {
   if (months.length === 0) return [];
 
@@ -189,6 +202,7 @@ async function monthlySeries(
     WHERE "userId" = ${userId}
       AND "date" >= ${start}
       AND "date" < ${end}
+      AND "categoryId" IS DISTINCT FROM ${transferId}
     GROUP BY 1, 2
   `;
 
@@ -234,17 +248,29 @@ export async function getReportSummary(
   options: ReportSummaryOptions = {}
 ): Promise<ReportSummaryDTO> {
   const period = resolvePeriod(options);
+  const systemIds = await ensureSystemCategories(prisma, userId);
+  const transferId = systemIds[SystemCategoryKey.TRANSFER];
 
   const [totals, uncategorizedCount] = await Promise.all([
-    totalsByType(userId, period),
+    totalsByType(userId, period, transferId),
+    // "Sem categoria" deixou de ser ausência e virou lugar: as duas ocultas.
     prisma.transaction.count({
-      where: { userId, categoryId: null, ...dateFilter(period) },
+      where: {
+        userId,
+        categoryId: {
+          in: [
+            systemIds[SystemCategoryKey.UNCATEGORIZED_EXPENSE],
+            systemIds[SystemCategoryKey.UNCATEGORIZED_INCOME],
+          ],
+        },
+        ...dateFilter(period),
+      },
     }),
   ]);
 
   const [byCategory, monthly] = await Promise.all([
-    expensesByCategory(userId, period, totals.expense),
-    monthlySeries(userId, resolveSeriesMonths(period, options.history)),
+    expensesByCategory(userId, period, totals.expense, transferId),
+    monthlySeries(userId, resolveSeriesMonths(period, options.history), transferId),
   ]);
 
   const balance = Number((totals.income - totals.expense).toFixed(2));
