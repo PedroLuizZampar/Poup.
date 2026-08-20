@@ -14,6 +14,7 @@ import { Field } from "../components/ui/Field";
 import { TransactionDetailModal } from "../components/transactions/TransactionDetailModal";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useCategoryMap } from "../hooks/useCategories";
+import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
 
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -185,7 +186,7 @@ export function TransactionsPage() {
   return (
     <div className="flex flex-col gap-6 anim-fade-up">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-row items-start justify-between gap-4">
         <div>
           <h1 className="text-display-xl font-display font-extrabold text-text-primary">
             Transações
@@ -194,6 +195,7 @@ export function TransactionsPage() {
             Visualize e categorize suas movimentações financeiras
           </p>
         </div>
+        <SuggestionsButton />
       </div>
 
       {/* Barra de Filtros */}

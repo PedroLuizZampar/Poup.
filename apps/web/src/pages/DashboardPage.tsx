@@ -31,6 +31,7 @@ import { MonthlyFlowChart } from "../components/dashboard/MonthlyFlowChart";
 import { MonthSummaryPanel } from "../components/dashboard/MonthSummaryPanel";
 import { useToast } from "../components/ui/Toast";
 import { useCategories } from "../hooks/useCategories";
+import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
 import { useMonthNavigation } from "../hooks/useMonthNavigation";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { summarizeAccounts } from "../lib/accounts";
@@ -180,6 +181,7 @@ export function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          <SuggestionsButton />
           <Button
             variant="secondary"
             size="md"
