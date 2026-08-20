@@ -4,10 +4,12 @@ import { Logo } from "../icons/Logo";
 import { BellIcon, SunIcon, MoonIcon } from "../icons/Icons";
 import { NotificationDrawer } from "../notifications/NotificationDrawer";
 import { BottomNav } from "./BottomNav";
+import { OfflineBanner } from "../common/OfflineScreen";
 import { fetchNotifications, clearToken } from "../../lib/api";
 import { UserAvatar } from "../ui/UserAvatar";
 import type { UserDTO } from "@poup/shared";
 import { useTheme } from "../../context/ThemeContext";
+import { useOnlineStatus } from "../../hooks/usePwa";
 
 export function AppLayout({
   user,
@@ -20,6 +22,7 @@ export function AppLayout({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { theme, toggleTheme } = useTheme();
+  const online = useOnlineStatus();
   const location = useLocation();
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -180,6 +183,8 @@ export function AppLayout({
           </div>
         </div>
       </header>
+
+      {!online && <OfflineBanner />}
 
       {/* Main Content Area com chave para animação de transição.
           O `pb` desconta a barra inferior e a safe area para o conteúdo não

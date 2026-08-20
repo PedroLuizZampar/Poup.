@@ -10,7 +10,3 @@ release/
 Thumbs.db
 generated/
 dev-dist/
-
-# harness temporario de verificacao de layout
-apps/web/devcheck.html
-apps/web/src/devcheck.tsx

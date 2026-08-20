@@ -20,7 +20,12 @@ import {
   MoonIcon,
   TagIcon,
   ChevronRightIcon,
+  DownloadIcon,
+  ShareIcon,
+  CheckIcon,
 } from "../components/icons/Icons";
+import { useInstallState } from "../hooks/usePwa";
+import { promptInstall } from "../lib/pwa";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
@@ -61,6 +66,7 @@ export function ProfilePage({
   const toast = useToast();
   const confirm = useConfirm();
   const { theme, setTheme } = useTheme();
+  const { instalado, podeInstalar, precisaDeInstrucoes } = useInstallState();
 
   async function loadData() {
     try {
@@ -238,6 +244,52 @@ export function ProfilePage({
             })}
           </div>
         </div>
+
+        {/* Instalar na tela de início. A seção só aparece quando há o que
+            oferecer: com o app já instalado, ou num navegador que não instala,
+            ela seria promessa sem botão. */}
+        {(podeInstalar || precisaDeInstrucoes || instalado) && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-border/60">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm text-text-primary flex items-center gap-2">
+                Instalar o Poup
+                {instalado && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+                    <CheckIcon className="w-3.5 h-3.5" aria-hidden="true" /> instalado
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
+                {instalado
+                  ? "O app já está na sua tela de início e abre sem a barra do navegador."
+                  : precisaDeInstrucoes
+                  ? "No iPhone e no iPad a instalação é manual: toque em Compartilhar e depois em “Adicionar à Tela de Início”."
+                  : "Coloque um ícone na tela de início e abra o Poup como um app, sem a barra do navegador."}
+              </p>
+            </div>
+
+            {podeInstalar && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void promptInstall()}
+                iconLeft={<DownloadIcon className="w-4 h-4" />}
+                className="self-start sm:self-auto shrink-0"
+              >
+                Instalar o Poup
+              </Button>
+            )}
+
+            {precisaDeInstrucoes && (
+              <span
+                aria-hidden="true"
+                className="self-start sm:self-auto shrink-0 w-10 h-10 rounded-tile bg-surface-alt border border-border text-text-secondary flex items-center justify-center"
+              >
+                <ShareIcon className="w-5 h-5" />
+              </span>
+            )}
+          </div>
+        )}
 
         <Link
           to="/categorias"

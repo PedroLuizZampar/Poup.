@@ -62,9 +62,32 @@ Poup/
 23. Planejamento: abas de orçamentos e metas
 24. Relatórios (distribuição por categoria, por período)
 25. Categorias (criar, editar, excluir, com gasto do mês)
-26. Perfil: conexões Pluggy, credenciais, foto e senha
+26. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro)
 27. Skeletons de carregamento, estados vazios, toasts e diálogos de confirmação
 28. Painel de notificações
+
+### Mobile
+29. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
+    ela nenhuma rota era alcançável no celular a não ser digitando a URL
+30. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
+    toque, e a tabela de transações vira lista de cards
+31. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
+    alvos de toque de 44px via `.tap-target`, `dvh` no lugar de `vh`
+32. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
+
+### PWA
+33. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
+    ícones) e **`NetworkOnly` para `/api/*`** — saldo servido do cache sem aviso
+    é pior que tela vazia
+34. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
+    partir do `Logo.tsx`
+35. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
+    render-block do CDN do Google e entra fonte precacheável
+36. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
+    manuais do iOS quando não há prompt; banner de versão nova em vez de recarga
+    automática
+37. Tela de sem conexão honesta, e sessão preservada quando o servidor não
+    responde — falha de rede deixou de ser tratada como sessão expirada
 
 ## Backlog (planejado, **não** implementado)
 
@@ -86,6 +109,26 @@ Outros pendentes conhecidos:
 - **Dois sistemas de ícone** convivem: `Icons.tsx` (feito à mão) e `lucide-react` (usado por `categoryIcons.tsx`).
 - **Dinheiro trafega como `number`** nos DTOs. Os agregados já são somados no banco; o que resta é a exibição.
 
+## Deploy
+
+Em produção há **um processo só**: `apps/api` serve o build do `apps/web`
+(`express.static` + fallback de SPA) e monta a API em `/api`. Origem única não é
+conveniência — o service worker só controla páginas do próprio escopo, e
+`start_url`, `scope` e o fallback de navegação todos assumem o mesmo domínio.
+
+```
+npm run build     # shared -> api -> web
+npm start         # sobe a API, que serve o app junto
+```
+
+- `WEB_DIST` (opcional) aponta para outro diretório de build; o padrão é
+  `apps/web/dist`, resolvido a partir do `dist` da API.
+- **HTTPS é obrigatório.** Service worker e instalação não funcionam em origem
+  insegura fora de `localhost`. Qualquer host com TLS automático (Fly.io,
+  Render, Railway) resolve; o Neon continua onde está.
+- No iOS o PWA só instala pelo Safari, por "Adicionar à Tela de Início" — não há
+  prompt programático.
+
 ## Credenciais e segredos
 
 Em `apps/api/.env` (fora do controle de versão):
@@ -93,7 +136,7 @@ Em `apps/api/.env` (fora do controle de versão):
 - `DATABASE_URL` (Neon)
 - `JWT_SECRET`
 - `APP_ENCRYPTION_KEY` — 32 bytes em base64, cifra o client secret da Pluggy no banco
-- `CORS_ORIGINS` (opcional) — origens extras aceitas, além do dev server do Vite
+- `CORS_ORIGINS` (opcional) — origens extras aceitas, além da própria origem e do dev server do Vite
 - `PORT` (opcional) — `0` deixa o sistema escolher; hosts em nuvem costumam injetar a porta aqui
 
 As credenciais da Pluggy (client id/secret) **não** ficam no ambiente: pertencem ao usuário e são cadastradas pelo app. A `apiKey` é obtida dinamicamente pelo backend e cacheada em memória.

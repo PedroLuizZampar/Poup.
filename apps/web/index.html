@@ -9,17 +9,30 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>Poup.</title>
+    <meta
+      name="description"
+      content="Suas finanças pessoais num lugar só: contas conectadas, gastos categorizados, orçamentos e metas."
+    />
 
     <!-- Cor da barra do navegador, casando com `--bg` dos dois temas. Estes
          dois valores valem só até o JS subir: o ThemeContext reescreve os dois
          com a cor do tema realmente escolhido, que pode contrariar o sistema. -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6FAF7" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0F0F10" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- iOS. O Safari ignora o manifest para isto: sem estas três metas, o
+         atalho na tela de início abre dentro do navegador, com barra de
+         endereço e tudo. Vale registrar que no iPhone não existe prompt
+         programático — instalar é sempre "Adicionar à Tela de Início". -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Poup." />
+
+    <!-- As fontes são importadas pelo `main.tsx`: entram no bundle, deixam de
+         bloquear o primeiro paint e passam a ser precacheáveis. -->
   </head>
   <body>
     <div id="root"></div>

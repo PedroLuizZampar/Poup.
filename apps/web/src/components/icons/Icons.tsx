@@ -9,6 +9,40 @@ export function BellIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function WifiOffIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M2.5 8.5a16 16 0 0 1 4.6-2.6" />
+      <path d="M10.8 5.1A16 16 0 0 1 21.5 8.5" />
+      <path d="M5.8 12.1a11 11 0 0 1 2.4-1.4" />
+      <path d="M15.4 10.4a11 11 0 0 1 2.8 1.7" />
+      <path d="M9.2 15.6a6 6 0 0 1 5.6 0" />
+      <line x1="12" y1="20" x2="12.01" y2="20" />
+      <line x1="3" y1="3" x2="21" y2="21" />
+    </svg>
+  );
+}
+
+export function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 3v11" />
+      <polyline points="8 10 12 14 16 10" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </svg>
+  );
+}
+
+export function ShareIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 15V3" />
+      <polyline points="8 6 12 2.5 16 6" />
+      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+    </svg>
+  );
+}
+
 export function HomeIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>

@@ -55,9 +55,9 @@ export class ApiError extends Error {
  *    servida por http.
  */
 function resolveApiUrl(): string {
-  if (typeof window === "undefined") return "http://localhost:4000";
+  if (typeof window === "undefined") return "http://localhost:4000/api";
   if (window.location.protocol.startsWith("http")) return "/api";
-  return "http://localhost:4000";
+  return "http://localhost:4000/api";
 }
 
 const API_URL = resolveApiUrl();
@@ -93,9 +93,24 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       headers,
     });
   } catch (err: any) {
-    throw new Error(
+    // Estar sem rede e o servidor estar fora são falhas diferentes para quem
+    // lê: uma o usuário resolve, a outra não. `navigator.onLine` erra para
+    // cima — diz "sim" a qualquer interface ativa —, mas um `false` é sempre
+    // confiável, que é o único caso em que mudamos o texto.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new ApiError(
+        "Você está sem conexão. O Poup precisa de internet para buscar seus dados.",
+        0,
+        undefined,
+        "OFFLINE"
+      );
+    }
+    throw new ApiError(
       `Não foi possível falar com o servidor do Poup (${API_URL}). ` +
-        "Em desenvolvimento, confira se 'npm run dev' está em execução."
+        "Em desenvolvimento, confira se 'npm run dev' está em execução.",
+      0,
+      undefined,
+      "NETWORK"
     );
   }
 
@@ -150,16 +165,22 @@ export async function updatePluggyCredentials(payload: {
   return res.credentials;
 }
 
-export async function fetchMe() {
+/**
+ * Devolve `null` quando não há sessão — sem token, ou com token recusado.
+ * Falha de rede **sobe**: apagar o token aqui deslogava quem só estava sem
+ * sinal, que é exatamente o caso de abrir o app instalado fora de cobertura.
+ */
+export async function fetchMe(): Promise<UserDTO | null> {
   const token = getToken();
   if (!token) return null;
 
   try {
     const res = await request<{ user: UserDTO }>("/auth/me");
     return res.user;
-  } catch {
-    clearToken();
-    return null;
+  } catch (err) {
+    // O 401 já limpou o token dentro de `request`.
+    if (err instanceof ApiError && err.status === 401) return null;
+    throw err;
   }
 }
 

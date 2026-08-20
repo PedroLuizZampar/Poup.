@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { UserDTO } from "@poup/shared";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { fetchMe, getToken } from "./lib/api";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
@@ -15,6 +15,8 @@ import { ProfilePage } from "./pages/ProfilePage";
 import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./components/ui/Toast";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
+import { OfflineScreen } from "./components/common/OfflineScreen";
+import { UpdateBanner } from "./components/common/UpdateBanner";
 
 /**
  * A flag de onboarding é por usuário, e não da máquina.
@@ -33,16 +35,27 @@ export function App() {
   const [checking, setChecking] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [authScreen, setAuthScreen] = useState<"login" | "signup">("login");
+  /**
+   * Há sessão salva, mas não deu para confirmá-la: o servidor não respondeu.
+   * Isto **não** é "não está logado" — mandar essa pessoa para a tela de login
+   * seria mentir sobre o motivo e ainda pedir a senha para nada.
+   */
+  const [semResposta, setSemResposta] = useState(false);
 
-  useEffect(() => {
+  function verificarSessao() {
     if (!getToken()) {
       setChecking(false);
       return;
     }
+    setChecking(true);
+    setSemResposta(false);
     fetchMe()
       .then((u) => setUser(u))
+      .catch(() => setSemResposta(true))
       .finally(() => setChecking(false));
-  }, []);
+  }
+
+  useEffect(verificarSessao, []);
 
   useEffect(() => {
     if (!user) {
@@ -70,6 +83,8 @@ export function App() {
                 <span className="font-display font-bold text-sm text-primary">Carregando Poup...</span>
               </div>
             </div>
+          ) : semResposta ? (
+            <OfflineScreen onRetry={verificarSessao} />
           ) : !user ? (
             authScreen === "signup" ? (
               <SignupPage
@@ -89,7 +104,7 @@ export function App() {
           ) : showOnboarding ? (
             <OnboardingPage onFinish={handleFinishOnboarding} />
           ) : (
-            <HashRouter>
+            <BrowserRouter>
               <Routes>
                 <Route element={<AppLayout user={user} onLoggedOut={() => setUser(null)} />}>
                   <Route path="/" element={<DashboardPage />} />
@@ -110,8 +125,9 @@ export function App() {
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
               </Routes>
-            </HashRouter>
+            </BrowserRouter>
           )}
+          <UpdateBanner />
         </ConfirmProvider>
       </ToastProvider>
     </ThemeProvider>
