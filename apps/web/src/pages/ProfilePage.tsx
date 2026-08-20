@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import type { ItemDTO, AccountDTO, UserDTO, PluggyCredentialsDTO } from "@poup/shared";
 import {
   fetchItems,
@@ -15,7 +16,12 @@ import {
   KeyIcon,
   PlusIcon,
   AlertIcon,
+  SunIcon,
+  MoonIcon,
+  TagIcon,
+  ChevronRightIcon,
 } from "../components/icons/Icons";
+import { useTheme } from "../context/ThemeContext";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { InstitutionLogo } from "../components/ui/InstitutionLogo";
@@ -54,6 +60,7 @@ export function ProfilePage({
 
   const toast = useToast();
   const confirm = useConfirm();
+  const { theme, setTheme } = useTheme();
 
   async function loadData() {
     try {
@@ -175,6 +182,78 @@ export function ProfilePage({
             Encerrar sessão
           </Button>
         </div>
+      </div>
+
+      {/* Preferências.
+          As duas entradas aqui existem porque o mobile não tem onde mais
+          alcançá-las: o alternador de tema morava só no header, que encolhe, e
+          Categorias saiu da barra inferior para caber em cinco abas. */}
+      <div className="bg-surface rounded-panel p-6 shadow-sh1 border border-border flex flex-col gap-5">
+        <div>
+          <h2 className="font-display font-bold text-base md:text-lg text-text-primary">
+            Preferências
+          </h2>
+          <p className="text-xs text-text-secondary mt-0.5">
+            Aparência do app e organização das suas categorias
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-text-primary">Aparência</h3>
+            <p className="text-xs text-text-secondary mt-0.5">
+              Sem escolha aqui, o app segue o tema do seu sistema.
+            </p>
+          </div>
+
+          <div
+            role="radiogroup"
+            aria-label="Tema do aplicativo"
+            className="flex items-center gap-1 p-1 rounded-ctl bg-surface-alt border border-border self-start sm:self-auto shrink-0"
+          >
+            {(
+              [
+                { value: "light", label: "Claro", Icon: SunIcon },
+                { value: "dark", label: "Escuro", Icon: MoonIcon },
+              ] as const
+            ).map(({ value, label, Icon }) => {
+              const isActive = theme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  onClick={() => setTheme(value)}
+                  className={`h-ctl-sm min-h-ctl-sm px-4 rounded-ctl flex items-center gap-2 text-xs font-semibold transition-colors focus-ring cursor-pointer ${
+                    isActive
+                      ? "bg-surface text-text-primary shadow-sh1"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <Link
+          to="/categorias"
+          className="flex items-center gap-3 p-3 -mx-1 rounded-card border border-border bg-surface-alt/50 hover:bg-surface-alt transition-colors focus-ring min-h-ctl"
+        >
+          <span className="w-10 h-10 rounded-tile bg-primary-soft text-primary flex items-center justify-center shrink-0">
+            <TagIcon className="w-5 h-5" aria-hidden="true" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm text-text-primary">Categorias</span>
+            <span className="block text-xs text-text-secondary">
+              Criar, renomear e excluir categorias de gasto
+            </span>
+          </span>
+          <ChevronRightIcon className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
+        </Link>
       </div>
 
       {/* Credenciais da Pluggy. Ficam acima das conexões porque são o que

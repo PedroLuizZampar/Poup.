@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-export type UserAvatarSize = "sm" | "md" | "lg";
+export type UserAvatarSize = "xs" | "sm" | "md" | "lg";
 
 export interface UserAvatarProps {
   name: string;
@@ -10,9 +10,12 @@ export interface UserAvatarProps {
 }
 
 const sizeClasses: Record<UserAvatarSize, string> = {
-  sm: "w-8 h-8 text-xs",
-  md: "w-10 h-10 text-sm",
-  lg: "w-14 h-14 text-lg",
+  /** Do tamanho de um ícone de 24px — é assim que ele entra na barra inferior.
+   *  Sem sombra: ali ele convive com ícones de traço, e elevação destoaria. */
+  xs: "w-6 h-6 text-[9px]",
+  sm: "w-8 h-8 text-xs shadow-sh1",
+  md: "w-10 h-10 text-sm shadow-sh1",
+  lg: "w-14 h-14 text-lg shadow-sh1",
 };
 
 export function getInitials(name: string): string {
@@ -40,7 +43,7 @@ export function UserAvatar({ name, avatarUrl, size = "md", className = "" }: Use
 
   return (
     <div
-      className={`${sizeClasses[size]} rounded-full overflow-hidden bg-primary-soft text-primary font-display font-extrabold flex items-center justify-center shadow-sh1 select-none shrink-0 ${className}`}
+      className={`${sizeClasses[size]} rounded-full overflow-hidden bg-primary-soft text-primary font-display font-extrabold flex items-center justify-center select-none shrink-0 ${className}`}
     >
       {showImage ? (
         <img

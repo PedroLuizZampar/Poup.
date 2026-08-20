@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Logo } from "../icons/Logo";
 import { BellIcon, SunIcon, MoonIcon } from "../icons/Icons";
 import { NotificationDrawer } from "../notifications/NotificationDrawer";
+import { BottomNav } from "./BottomNav";
 import { fetchNotifications, clearToken } from "../../lib/api";
 import { UserAvatar } from "../ui/UserAvatar";
 import type { UserDTO } from "@poup/shared";
@@ -51,8 +52,9 @@ export function AppLayout({
 
   return (
     <div className="min-h-dvh flex flex-col bg-bg text-text-primary">
-      {/* Topbar */}
-      <header className="h-[72px] flex-none bg-surface border-b border-border px-6 md:px-12 flex items-center justify-between sticky top-0 z-40 transition-colors duration-150">
+      {/* Topbar. Abaixo de `md` ela encolhe para 56px e guarda só o essencial:
+          navegar é trabalho da barra inferior, e o tema mudou-se para o Perfil. */}
+      <header className="h-[var(--header-h)] flex-none bg-surface border-b border-border px-4 sm:px-6 md:px-12 flex items-center justify-between sticky top-0 z-40 transition-colors duration-150">
         <div className="flex items-center gap-10">
           {/* Logo */}
           <NavLink to="/" className="flex items-center gap-2.5 group focus-ring rounded-lg">
@@ -68,6 +70,7 @@ export function AppLayout({
               <NavLink
                 key={item.path}
                 to={item.path}
+                end={item.path === "/"}
                 className={({ isActive }) =>
                   `relative px-3.5 py-2 rounded-ctl text-body transition-colors focus-ring ${
                     isActive
@@ -90,12 +93,13 @@ export function AppLayout({
         </div>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-3 md:gap-4 relative">
-          {/* Theme Toggle */}
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4 relative">
+          {/* Alternar tema. Só no desktop: no mobile o controle vive na seção
+              "Aparência" do Perfil, onde ele cabe com rótulo e alvo de toque. */}
           <button
             type="button"
             onClick={toggleTheme}
-            className="w-10 h-10 rounded-full bg-surface-alt flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-sunken transition-colors focus-ring cursor-pointer"
+            className="hidden md:flex w-10 h-10 rounded-full bg-surface-alt items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-sunken transition-colors focus-ring cursor-pointer"
             title={theme === "dark" ? "Mudar para modo claro" : "Mudar para modo escuro"}
             aria-label="Alternar tema"
           >
@@ -131,13 +135,17 @@ export function AppLayout({
             />
           </div>
 
-          {/* User Avatar & Dropdown */}
-          <div ref={userMenuRef} className="relative">
+          {/* Avatar e menu do usuário. No mobile o avatar já é a aba Perfil da
+              barra inferior — repeti-lo aqui seria a mesma foto duas vezes numa
+              tela de 360px, e o dropdown não teria alvo de toque decente. */}
+          <div ref={userMenuRef} className="relative hidden md:block">
             <button
               type="button"
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               title={`${user.name} (${user.email})`}
               aria-label="Menu do usuário"
+              aria-expanded={isUserMenuOpen}
+              aria-haspopup="menu"
               className="rounded-full cursor-pointer hover:opacity-90 transition-opacity focus-ring"
             >
               <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size="md" />
@@ -173,11 +181,17 @@ export function AppLayout({
         </div>
       </header>
 
-      {/* Main Content Area com chave para animação de transição */}
-      <main key={location.pathname} className="flex-1 w-full max-w-7xl mx-auto px-6 md:px-12 py-8 anim-fade-up">
+      {/* Main Content Area com chave para animação de transição.
+          O `pb` desconta a barra inferior e a safe area para o conteúdo não
+          terminar embaixo dela — `--nav-h` é 0 a partir de `md`. */}
+      <main
+        key={location.pathname}
+        className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-6 md:py-8 pb-[calc(var(--nav-h)+env(safe-area-inset-bottom)+1.5rem)] md:pb-8 anim-fade-up"
+      >
         <Outlet context={{ user }} />
       </main>
+
+      <BottomNav user={user} />
     </div>
   );
 }
-
