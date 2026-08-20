@@ -129,7 +129,7 @@ export function Modal({
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
-        className={`w-full ${maxWidthClass} max-h-[90vh] rounded-modal bg-surface text-text-primary shadow-sh3 border border-border p-6 md:p-8 flex flex-col gap-6 anim-scale-in`}
+        className={`w-full ${maxWidthClass} max-h-[90dvh] rounded-modal bg-surface text-text-primary shadow-sh3 border border-border p-6 md:p-8 flex flex-col gap-6 anim-scale-in`}
       >
         {/* Header */}
         {(title || showCloseButton) && (

@@ -107,7 +107,7 @@ export function SignupPage({
   const confirmMismatch = confirmPassword.length > 0 && confirmPassword !== password;
 
   return (
-    <div className="min-h-screen overflow-y-auto flex items-center justify-center bg-bg p-4 py-10 anim-fade-in">
+    <div className="min-h-dvh overflow-y-auto flex items-center justify-center bg-bg p-4 py-10 anim-fade-in">
       <div className="w-full max-w-lg bg-surface rounded-panel shadow-sh3 border border-border p-8 md:p-10 flex flex-col gap-7">
         <div className="flex flex-col items-center text-center gap-2">
           <div className="w-12 h-12 rounded-tile bg-primary-soft flex items-center justify-center mb-1 shadow-sh1">

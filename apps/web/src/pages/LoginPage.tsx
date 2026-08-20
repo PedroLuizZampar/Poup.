@@ -33,7 +33,7 @@ export function LoginPage({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg p-4 anim-fade-in">
+    <div className="min-h-dvh flex items-center justify-center bg-bg p-4 anim-fade-in">
       <div className="w-full max-w-md bg-surface rounded-panel shadow-sh3 border border-border p-8 md:p-10 flex flex-col gap-6">
         {/* Header com Logo */}
         <div className="flex flex-col items-center text-center gap-2">

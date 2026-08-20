@@ -57,7 +57,7 @@ export function OnboardingPage({ onFinish }: OnboardingPageProps) {
   const slide = SLIDES[currentSlide];
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-bg text-text-primary">
+    <div className="min-h-dvh grid grid-cols-1 lg:grid-cols-2 bg-bg text-text-primary">
       {/* Coluna Esquerda: Texto e Ações */}
       <div className="flex flex-col justify-between p-8 md:p-16 lg:p-24 max-w-xl mx-auto w-full">
         <div className="flex items-center gap-3">

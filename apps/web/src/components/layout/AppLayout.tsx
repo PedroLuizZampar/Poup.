@@ -50,7 +50,7 @@ export function AppLayout({
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg text-text-primary">
+    <div className="min-h-dvh flex flex-col bg-bg text-text-primary">
       {/* Topbar */}
       <header className="h-[72px] flex-none bg-surface border-b border-border px-6 md:px-12 flex items-center justify-between sticky top-0 z-40 transition-colors duration-150">
         <div className="flex items-center gap-10">

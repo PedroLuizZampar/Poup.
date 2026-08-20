@@ -2,8 +2,19 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` deixa o app pintar sob o notch e o indicador de
+         home do iPhone; o respiro volta pelos `env(safe-area-inset-*)`. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>Poup.</title>
+
+    <!-- Cor da barra do navegador, casando com `--bg` dos dois temas. Estes
+         dois valores valem só até o JS subir: o ThemeContext reescreve os dois
+         com a cor do tema realmente escolhido, que pode contrariar o sistema. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6FAF7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0F0F10" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap"

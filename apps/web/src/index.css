@@ -86,7 +86,20 @@
 
   --ease-out:    cubic-bezier(.22, 1, .36, 1);
   --ease-in:     cubic-bezier(.55, 0, 1, .45);
-  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+
+  /* Altura do chrome fixo. Quem rola precisa saber quanto do topo e do rodapé
+     está ocupado para não terminar o conteúdo embaixo da barra — e essas duas
+     medidas mudam de valor entre mobile e desktop, não de existência. */
+  --header-h: 56px;
+  --nav-h:    56px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --header-h: 72px;
+    /* A barra inferior é só do mobile; no desktop a navegação está no header. */
+    --nav-h: 0px;
+  }
 }
 
 .dark {
@@ -160,12 +173,46 @@
   --focus-color: #4FBF89;
 }
 
+/* ---------------------------------------------------------------------------
+   Movimento reduzido
+   Zerar toda animação (`.01ms`) atende ao pedido pela letra e o trai pelo
+   espírito: quem pede menos movimento perde junto o feedback de que algo mudou
+   de estado. Aqui a duração encurta para o degrau mais rápido do sistema e as
+   animações que **deslocam** trocam de keyframe para o fade — a informação
+   fica, o percurso sai.
+   --------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  :root { --dur-instant: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; }
+  :root {
+    --dur-instant: 80ms;
+    --dur-fast:    80ms;
+    --dur-base:    80ms;
+    --dur-slow:    80ms;
+  }
+
   *, *::before, *::after {
-    animation-duration: .01ms !important;
+    animation-duration: var(--dur-instant) !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
+    transition-duration: var(--dur-instant) !important;
+    transition-delay: 0ms !important;
+  }
+
+  .anim-fade-up,
+  .anim-fade-down,
+  .anim-slide-right,
+  .anim-scale-in {
+    animation-name: fadeIn !important;
+  }
+
+  /* O shimmer é movimento contínuo e sem fim — não há versão curta dele. */
+  .shimmer-effect {
+    animation: none;
+    background: var(--surface-alt);
+  }
+
+  /* Único deslocamento disparado por hover no app (cards de categoria). */
+  .hover\:-translate-y-0\.5:hover {
+    transform: none;
   }
 }
 
@@ -272,6 +319,44 @@
 
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   Toque
+   Tudo aqui vive sob `pointer: coarse` — o dedo, não o mouse. O tamanho visual
+   dos controles no desktop fica exatamente como está; só a mira muda.
+   --------------------------------------------------------------------------- */
+
+@media (pointer: coarse) {
+  /* O Safari do iOS dá zoom ao focar qualquer campo com fonte menor que 16px, e
+     não desfaz sozinho — tocar na busca joga o layout para fora da tela. Uma
+     regra resolve os oito arquivos de campo de uma vez. Os dois `:not()` estão
+     aqui pela especificidade: sem eles um seletor de elemento perde para as
+     classes `text-xs`/`text-sm` do Tailwind. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Controles pequenos sobem para o mínimo confortável de toque. */
+  .h-ctl-sm     { height: 44px; }
+  .min-h-ctl-sm { min-height: 44px; }
+}
+
+/* Botão de ícone pequeno que precisa de alvo grande sem ser redesenhado: o
+   `::after` estende a área clicável para fora, o desenho continua do tamanho
+   que era. Só vale no toque — no mouse, 28px já é um alvo confortável. */
+.tap-target {
+  position: relative;
+}
+
+@media (pointer: coarse) {
+  .tap-target::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
 }
 
 .tnum {

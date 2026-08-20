@@ -64,7 +64,7 @@ export function App() {
       <ToastProvider>
         <ConfirmProvider>
           {checking ? (
-            <div className="min-h-screen flex items-center justify-center bg-bg">
+            <div className="min-h-dvh flex items-center justify-center bg-bg">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 border-4 border-primary-soft border-t-primary rounded-full animate-spin" />
                 <span className="font-display font-bold text-sm text-primary">Carregando Poup...</span>
