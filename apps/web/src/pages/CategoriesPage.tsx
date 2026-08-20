@@ -17,6 +17,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { CardSkeleton } from "../components/common/Skeleton";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { useToast } from "../components/ui/Toast";
+import { useCoarsePointer } from "../hooks/useMediaQuery";
 import { formatCurrency } from "../lib/format";
 import { getCurrentMonthStr } from "../lib/date";
 
@@ -34,6 +35,12 @@ export function CategoriesPage() {
   const confirm = useConfirm();
   const toast = useToast();
   const currentMonthStr = getCurrentMonthStr();
+  /**
+   * No dedo o card inteiro deixa de ser clicável. Antes havia dois botões de
+   * 28px com `stopPropagation` dentro de um alvo maior que também abria o
+   * modal: no mouse funciona, no toque a chance de abrir a ação errada é alta.
+   */
+  const isCoarse = useCoarsePointer();
 
   async function loadData() {
     try {
@@ -210,7 +217,7 @@ export function CategoriesPage() {
       </div>
 
       {/* Faixa de Resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-surface rounded-card p-5 border border-border shadow-sh1 flex flex-col gap-1">
           <span className="text-overline uppercase tracking-wider text-text-secondary">
             Total cadastradas
@@ -242,12 +249,12 @@ export function CategoriesPage() {
       </div>
 
       {/* Barra de Ordenação */}
-      <div className="flex items-center justify-between gap-4 pt-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <span className="text-xs font-semibold text-text-secondary">
           Lista de categorias ({sortedCategories.length})
         </span>
 
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <Select
             size="sm"
             value={sortBy}
@@ -302,37 +309,56 @@ export function CategoriesPage() {
             return (
               <div
                 key={cat.id}
-                onClick={() => {
-                  setEditingCategory(cat);
-                  setIsModalOpen(true);
-                }}
-                className="group bg-surface rounded-card p-5 border border-border shadow-sh1 hover:shadow-sh2 hover:-translate-y-0.5 transition-all duration-150 cursor-pointer flex flex-col justify-between gap-4"
+                onClick={
+                  isCoarse
+                    ? undefined
+                    : () => {
+                        setEditingCategory(cat);
+                        setIsModalOpen(true);
+                      }
+                }
+                className={`group bg-surface rounded-card p-5 border border-border shadow-sh1 transition-all duration-150 flex flex-col justify-between gap-4 ${
+                  isCoarse ? "" : "cursor-pointer hover:shadow-sh2 hover:-translate-y-0.5"
+                }`}
               >
                 {/* Top: Tile + Nome + Ações */}
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                  {/* O bloco de identidade é o alvo explícito de edição — e, de
+                      quebra, o primeiro caminho de teclado até o modal: o card
+                      com `onClick` num `div` nunca recebeu foco. */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingCategory(cat);
+                      setIsModalOpen(true);
+                    }}
+                    className="flex items-center gap-3 min-w-0 text-left -m-1 p-1 rounded-tile focus-ring cursor-pointer"
+                  >
                     <CategoryTile icon={cat.icon} colorKey={cat.colorKey} size="lg" />
-                    <div className="min-w-0">
-                      <h3 className="font-display font-bold text-sm md:text-base text-text-primary truncate">
+                    <span className="min-w-0">
+                      <span className="block font-display font-bold text-sm md:text-base text-text-primary truncate">
                         {cat.name}
-                      </h3>
-                      <span className="text-xs text-text-secondary">
+                      </span>
+                      <span className="block text-xs text-text-secondary">
                         {txCount} {txCount === 1 ? "transação" : "transações"}
                       </span>
-                    </div>
-                  </div>
+                    </span>
+                  </button>
 
-                  {/* Ações Rápidas */}
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                  {/* Ações Rápidas. O `gap-3` existe porque os alvos de toque de
+                      44px se estendem 8px para fora de cada ícone de 28px. */}
+                  <div className="flex items-center gap-3 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
                       title="Editar categoria"
+                      aria-label={`Editar a categoria ${cat.name}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingCategory(cat);
                         setIsModalOpen(true);
                       }}
-                      className="w-7 h-7 rounded-ctl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-alt transition-colors focus-ring"
+                      className="tap-target w-7 h-7 rounded-ctl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-alt transition-colors focus-ring cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
@@ -341,11 +367,12 @@ export function CategoriesPage() {
                     <button
                       type="button"
                       title="Excluir categoria"
+                      aria-label={`Excluir a categoria ${cat.name}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDelete(cat);
                       }}
-                      className="w-7 h-7 rounded-ctl flex items-center justify-center text-text-secondary hover:text-error hover:bg-error-soft transition-colors focus-ring"
+                      className="tap-target w-7 h-7 rounded-ctl flex items-center justify-center text-text-secondary hover:text-error hover:bg-error-soft transition-colors focus-ring cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 6h18" />

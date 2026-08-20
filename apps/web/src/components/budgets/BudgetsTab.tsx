@@ -212,13 +212,13 @@ export function BudgetsTab({ budgets, categories, loading, onRefresh }: BudgetsT
                       ? `Resta ${formatCurrency(remaining)}`
                       : `Ultrapassou ${formatCurrency(Math.abs(remaining))}`}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-3 shrink-0">
                     <button
                       type="button"
                       title="Editar orçamento"
                       aria-label={`Editar orçamento de ${b.categoryName}`}
                       onClick={() => openEditModal(b)}
-                      className="text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
+                      className="tap-target text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
                     >
                       <EditIcon className="w-4 h-4" />
                     </button>
@@ -227,7 +227,7 @@ export function BudgetsTab({ budgets, categories, loading, onRefresh }: BudgetsT
                       title="Excluir orçamento"
                       aria-label={`Excluir orçamento de ${b.categoryName}`}
                       onClick={() => handleDelete(b)}
-                      className="text-text-disabled hover:text-error transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
+                      className="tap-target text-text-disabled hover:text-error transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
                     >
                       <TrashIcon className="w-4 h-4" />
                     </button>

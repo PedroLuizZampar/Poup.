@@ -138,27 +138,30 @@ export function DashboardPage() {
     <div className="flex flex-col gap-8 anim-fade-up">
       {/* Header com Navegação de Mês */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <span className="text-xs md:text-sm text-text-secondary">
             Olá, {user.name.split(" ")[0]}
           </span>
-          <div className="flex items-center gap-3 mt-1">
+          {/* O nome do mês trunca em vez de empurrar as setas para fora da tela:
+              em 360px "Setembro de 2026" a 24px já não cabe ao lado de dois
+              botões e do atalho de volta ao mês corrente. */}
+          <div className="flex items-center gap-2 sm:gap-3 mt-1 min-w-0">
             <button
               type="button"
               onClick={month.goToPreviousMonth}
-              className="w-9 h-9 rounded-ctl bg-surface border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-alt transition-colors focus-ring cursor-pointer"
+              className="tap-target w-9 h-9 shrink-0 rounded-ctl bg-surface border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-alt transition-colors focus-ring cursor-pointer"
               title="Mês anterior"
               aria-label="Mês anterior"
             >
               <ChevronLeftIcon className="w-4 h-4" />
             </button>
-            <h1 className="font-display font-extrabold text-2xl md:text-3xl tracking-tight text-text-primary">
+            <h1 className="font-display font-extrabold text-2xl md:text-3xl tracking-tight text-text-primary truncate min-w-0">
               {month.fullName}
             </h1>
             <button
               type="button"
               onClick={month.goToNextMonth}
-              className="w-9 h-9 rounded-ctl bg-surface border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-alt transition-colors focus-ring cursor-pointer"
+              className="tap-target w-9 h-9 shrink-0 rounded-ctl bg-surface border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-alt transition-colors focus-ring cursor-pointer"
               title="Próximo mês"
               aria-label="Próximo mês"
             >
@@ -168,7 +171,7 @@ export function DashboardPage() {
               <button
                 type="button"
                 onClick={month.goToCurrentMonth}
-                className="text-xs font-semibold text-primary hover:underline ml-1 cursor-pointer focus-ring px-1.5 py-0.5 rounded"
+                className="tap-target shrink-0 text-xs font-semibold text-primary hover:underline cursor-pointer focus-ring px-1.5 py-0.5 rounded"
               >
                 Mês atual
               </button>
@@ -176,7 +179,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <Button
             variant="secondary"
             size="md"
@@ -184,11 +187,12 @@ export function DashboardPage() {
             loading={syncing}
             iconLeft={<RefreshIcon className="w-4 h-4 text-primary" />}
             title="Buscar movimentações novas"
+            className="flex-1 md:flex-none"
           >
             Sincronizar
           </Button>
-          <Link to="/transacoes">
-            <Button variant="primary" size="md">
+          <Link to="/transacoes" className="flex-1 md:flex-none">
+            <Button variant="primary" size="md" fullWidth className="md:w-auto">
               Ver transações
             </Button>
           </Link>

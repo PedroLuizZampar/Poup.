@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { NotificationDTO } from "@poup/shared";
 import {
   fetchNotifications,
@@ -7,6 +8,7 @@ import {
 } from "../../lib/api";
 import { CloseIcon, CheckIcon } from "../icons/Icons";
 import { formatDateTime } from "../../lib/format";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 interface NotificationDrawerProps {
   isOpen: boolean;
@@ -22,6 +24,13 @@ export function NotificationDrawer({
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  /**
+   * O painel é ancorado no sino — só que o sino não é o último item do header:
+   * o avatar vem depois. Em 360px a borda esquerda do popover caía em ≈ -40px.
+   * Abaixo de `sm` ele deixa de ser popover e vira folha de rodapé, que não
+   * depende de onde o gatilho está.
+   */
+  const isSheet = useMediaQuery("(max-width: 639px)");
 
   async function loadData() {
     try {
@@ -91,11 +100,22 @@ export function NotificationDrawer({
 
   if (!isOpen) return null;
 
-  return (
+  const panel = (
     <div
       ref={containerRef}
-      className="absolute top-12 right-0 w-80 sm:w-96 max-h-[480px] bg-surface rounded-panel shadow-sh3 border border-border flex flex-col z-50 overflow-hidden anim-scale-in"
+      className={
+        isSheet
+          ? "w-full max-h-[80dvh] bg-surface rounded-t-panel shadow-sh3 border border-b-0 border-border flex flex-col overflow-hidden anim-fade-up pb-[env(safe-area-inset-bottom)]"
+          : "absolute top-12 right-0 w-96 max-h-[480px] bg-surface rounded-panel shadow-sh3 border border-border flex flex-col z-50 overflow-hidden anim-scale-in"
+      }
     >
+      {isSheet && (
+        <div
+          aria-hidden="true"
+          className="mx-auto w-10 h-1 rounded-full bg-border-strong shrink-0 mt-3"
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-surface">
         <div className="flex items-center gap-2">
@@ -114,7 +134,7 @@ export function NotificationDrawer({
             <button
               type="button"
               onClick={handleMarkAllRead}
-              className="text-[11px] font-semibold text-primary hover:underline transition-all cursor-pointer focus-ring px-1.5 py-0.5 rounded-ctl"
+              className="tap-target text-[11px] font-semibold text-primary hover:underline transition-all cursor-pointer focus-ring px-1.5 py-0.5 rounded-ctl"
             >
               Marcar lidas
             </button>
@@ -123,7 +143,7 @@ export function NotificationDrawer({
             type="button"
             onClick={onClose}
             aria-label="Fechar notificações"
-            className="w-7 h-7 rounded-ctl bg-surface-alt flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors cursor-pointer focus-ring"
+            className="tap-target w-7 h-7 rounded-ctl bg-surface-alt flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors cursor-pointer focus-ring"
           >
             <CloseIcon className="w-3.5 h-3.5" />
           </button>
@@ -180,7 +200,7 @@ export function NotificationDrawer({
                       onClick={() => handleMarkRead(n.id)}
                       title="Marcar como lida"
                       aria-label="Marcar como lida"
-                      className="text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
+                      className="tap-target text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
                     >
                       <CheckIcon className="w-3.5 h-3.5" />
                     </button>
@@ -200,6 +220,18 @@ export function NotificationDrawer({
         )}
       </div>
     </div>
+  );
+
+  if (!isSheet) return panel;
+
+  return createPortal(
+    <div
+      role="presentation"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm anim-fade-in"
+    >
+      {panel}
+    </div>,
+    document.body
   );
 }
 

@@ -33,10 +33,10 @@ const TABS: Tab[] = [
 ];
 
 const TAB_CLASSES =
-  "relative flex flex-col items-center justify-center gap-0.5 h-full min-w-[56px] px-0.5 focus-ring rounded-tile transition-colors";
+  "relative flex flex-col items-center justify-center gap-0.5 h-full min-w-[56px] focus-ring rounded-tile transition-colors";
 
 /** O rótulo trunca em vez de vazar: abaixo de 360px "Planejamento" não cabe. */
-const LABEL_CLASSES = "text-caption leading-none w-full text-center truncate px-0.5";
+const LABEL_CLASSES = "text-caption leading-none w-full text-center truncate";
 
 /** Barrinha de aba ativa — a mesma do header no desktop, virada para cima. */
 function ActiveIndicator() {

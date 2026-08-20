@@ -1,3 +1,5 @@
+const plugin = require("tailwindcss/plugin");
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: "class",
@@ -141,7 +143,19 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    /**
+     * Variantes por tipo de ponteiro. Largura de tela responde "quanto espaço
+     * há"; estas respondem "com o quê a pessoa está apontando" — que é a
+     * pergunta certa para afordância que só existe no hover e para tamanho de
+     * alvo. Um tablet largo e uma janela estreita no desktop não são a mesma
+     * coisa, e `md:` confunde os dois.
+     */
+    plugin(({ addVariant }) => {
+      addVariant("coarse", "@media (pointer: coarse)");
+      addVariant("fine", "@media (pointer: fine)");
+    }),
+  ],
 };
 
 

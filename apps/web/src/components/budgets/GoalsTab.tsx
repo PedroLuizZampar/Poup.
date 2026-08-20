@@ -261,13 +261,13 @@ export function GoalsTab({ goals, accounts, loading, onRefresh }: GoalsTabProps)
                   <span className="text-text-secondary tnum">
                     {g.targetDate ? `Prazo: ${formatDate(g.targetDate)}` : "Sem prazo definido"}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-3 shrink-0">
                     <button
                       type="button"
                       title="Editar meta"
                       aria-label={`Editar meta ${g.name}`}
                       onClick={() => openEditModal(g)}
-                      className="text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
+                      className="tap-target text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
                     >
                       <EditIcon className="w-4 h-4" />
                     </button>
@@ -276,7 +276,7 @@ export function GoalsTab({ goals, accounts, loading, onRefresh }: GoalsTabProps)
                       title="Excluir meta"
                       aria-label={`Excluir meta ${g.name}`}
                       onClick={() => handleDelete(g)}
-                      className="text-text-disabled hover:text-error transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
+                      className="tap-target text-text-disabled hover:text-error transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
                     >
                       <TrashIcon className="w-4 h-4" />
                     </button>

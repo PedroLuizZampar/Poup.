@@ -89,7 +89,7 @@ export function ReportsPage() {
           </p>
         </div>
 
-        <div className="w-52">
+        <div className="w-full sm:w-52">
           <Select
             size="sm"
             value={period}
@@ -101,13 +101,13 @@ export function ReportsPage() {
 
       {/* Cards de Resumo */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-surface rounded-panel p-6 shadow-sh1 border border-border flex flex-col gap-1">
             <span className="text-overline uppercase tracking-wider text-text-secondary">
               Receitas no período

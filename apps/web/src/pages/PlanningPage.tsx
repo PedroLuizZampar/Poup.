@@ -58,7 +58,7 @@ export function PlanningPage() {
         <button
           type="button"
           onClick={() => setActiveTab("budgets")}
-          className={`pb-3 px-4 font-display text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer focus-ring ${
+          className={`min-h-ctl pb-3 px-4 font-display text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer focus-ring ${
             activeTab === "budgets"
               ? "border-primary text-primary"
               : "border-transparent text-text-secondary hover:text-text-primary"
@@ -69,7 +69,7 @@ export function PlanningPage() {
         <button
           type="button"
           onClick={() => setActiveTab("goals")}
-          className={`pb-3 px-4 font-display text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer focus-ring ${
+          className={`min-h-ctl pb-3 px-4 font-display text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer focus-ring ${
             activeTab === "goals"
               ? "border-primary text-primary"
               : "border-transparent text-text-secondary hover:text-text-primary"

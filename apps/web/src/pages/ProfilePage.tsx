@@ -373,7 +373,7 @@ export function ProfilePage({
                   key={item.id}
                   className="p-5 rounded-card bg-surface-alt/50 border border-border flex flex-col gap-4"
                 >
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div className="flex items-center gap-3 min-w-0">
                       {/* O logo é o próprio alvo de edição: clicar nele abre a
                           troca de imagem, sem um botão extra competindo por
@@ -392,8 +392,13 @@ export function ProfilePage({
                           size="md"
                           className="shadow-sh1"
                         />
-                        <span className="absolute inset-0 rounded-tile bg-black/55 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="coarse:hidden absolute inset-0 rounded-tile bg-black/55 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <EditIcon className="w-3.5 h-3.5" />
+                        </span>
+                        {/* No toque o mesmo recurso vira um selo permanente:
+                            sem hover, a cortina acima nunca apareceria. */}
+                        <span className="hidden coarse:flex absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-primary text-white border-2 border-surface items-center justify-center">
+                          <EditIcon className="w-2.5 h-2.5" />
                         </span>
                       </button>
                       <div className="min-w-0">
@@ -412,7 +417,7 @@ export function ProfilePage({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -458,7 +463,7 @@ export function ProfilePage({
                                 onClick={() => setRenamingAccount(acc)}
                                 title="Renomear conta"
                                 aria-label={`Renomear a conta ${acc.name}`}
-                                className="text-text-disabled hover:text-primary transition-colors rounded-ctl focus-ring cursor-pointer shrink-0"
+                                className="tap-target text-text-disabled hover:text-primary transition-colors rounded-ctl focus-ring cursor-pointer shrink-0"
                               >
                                 <EditIcon className="w-3.5 h-3.5" />
                               </button>

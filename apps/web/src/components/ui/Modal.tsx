@@ -112,8 +112,12 @@ export function Modal({
   }[maxWidth];
 
   const modalContent = (
+    // Abaixo de `sm` o diálogo é uma folha ancorada no rodapé, não uma caixa
+    // centralizada: ao abrir o teclado virtual, o meio da tela vira a metade de
+    // cima, e o campo em foco some atrás do teclado. Como todos os modais deste
+    // app são formulários, isso atingia quase todo fluxo de escrita.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm anim-fade-in"
       onClick={(e) => {
         if (closeOnOverlayClick && e.target === e.currentTarget) {
           onClose();
@@ -129,8 +133,15 @@ export function Modal({
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
-        className={`w-full ${maxWidthClass} max-h-[90dvh] rounded-modal bg-surface text-text-primary shadow-sh3 border border-border p-6 md:p-8 flex flex-col gap-6 anim-scale-in`}
+        className={`w-full ${maxWidthClass} max-h-[85dvh] sm:max-h-[90dvh] rounded-t-modal sm:rounded-modal bg-surface text-text-primary shadow-sh3 border border-border border-b-0 sm:border-b px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:p-6 md:p-8 flex flex-col gap-4 sm:gap-6 anim-fade-up sm:anim-scale-in`}
       >
+        {/* Puxador. Só desenho: sinaliza "isto é uma folha que sobe do rodapé" —
+            fechar continua sendo pelo X, pelo Esc e pelo toque fora. */}
+        <div
+          aria-hidden="true"
+          className="sm:hidden mx-auto w-10 h-1 rounded-full bg-border-strong shrink-0"
+        />
+
         {/* Header */}
         {(title || showCloseButton) && (
           <div className="flex items-start justify-between gap-4 border-b border-border pb-4 shrink-0">

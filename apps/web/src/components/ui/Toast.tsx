@@ -72,9 +72,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast: addToast, success, error, warning, info }}>
       {children}
-      {/* Toast Container */}
+      {/* Toast Container.
+          `right-5 w-full` dava, em 360px, uma caixa de 360px deslocada 20px da
+          direita: 20px ficavam fora da tela. No mobile a pilha passa a ocupar a
+          largura entre as margens e a subir acima da barra inferior, com que ela
+          colidiria de frente. */}
       <div
-        className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none"
+        className="fixed z-50 flex flex-col gap-2.5 pointer-events-none inset-x-4 bottom-[calc(var(--nav-h)+env(safe-area-inset-bottom)+1rem)] sm:inset-x-auto sm:right-5 sm:max-w-sm sm:w-full md:bottom-5"
         aria-live="polite"
       >
         {toasts.map((t) => {

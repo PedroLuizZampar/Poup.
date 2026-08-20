@@ -48,8 +48,11 @@ export function MonthSummaryPanel({
   const incomeText = formatCurrency(income);
   const expenseText = formatCurrency(expense);
 
+  // As divisórias verticais só existem quando as três colunas dividem uma linha
+  // — a partir de `lg`. Em duas colunas a terceira desce, e uma borda à esquerda
+  // no começo da segunda linha não separaria nada.
   const columnClasses =
-    "flex flex-col gap-1 min-w-0 sm:px-4 sm:first:pl-0 sm:last:pr-0 sm:border-l sm:border-border sm:first:border-l-0";
+    "flex flex-col gap-1 min-w-0 lg:px-4 lg:first:pl-0 lg:last:pr-0 lg:border-l lg:border-border lg:first:border-l-0";
 
   const asideClasses =
     "flex items-baseline gap-1.5 text-[11px] text-text-secondary whitespace-nowrap";
@@ -96,7 +99,7 @@ export function MonthSummaryPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-0 pt-5 border-t border-border">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-0 pt-5 border-t border-border">
         <div className={columnClasses}>
           <span className="flex items-center gap-1.5 text-overline uppercase tracking-wider text-income font-semibold">
             <ArrowUpIcon className="w-3.5 h-3.5 shrink-0" /> Receitas

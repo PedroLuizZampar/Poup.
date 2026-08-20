@@ -3,9 +3,12 @@ import React, {
   useRef,
   useEffect,
   useId,
+  useCallback,
   KeyboardEvent,
   ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+import { useCoarsePointer } from "../../hooks/useMediaQuery";
 
 export interface SelectOption<T = string> {
   value: T;
@@ -26,6 +29,9 @@ export interface SelectProps<T = string> {
   id?: string;
 }
 
+/** Altura máxima da lista no popover — precisa bater com `max-h-64` abaixo. */
+const POPOVER_MAX_HEIGHT = 256;
+
 export function Select<T extends string | number>({
   value,
   onChange,
@@ -40,10 +46,14 @@ export function Select<T extends string | number>({
 }: SelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  /** No desktop, abre para cima quando não há espaço embaixo. */
+  const [opensUpward, setOpensUpward] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
   const typeaheadBufferRef = useRef<string>("");
   const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isCoarse = useCoarsePointer();
 
   const autoId = useId();
   const selectId = customId || autoId;
@@ -59,6 +69,19 @@ export function Select<T extends string | number>({
       setHighlightedIndex(idx);
     }
   }, [isOpen, selectedIndex]);
+
+  /**
+   * Decide o lado antes de pintar. Um select no rodapé da tela abria a lista
+   * fora da área visível — no mobile, com listas longas (categorias, contas),
+   * esse era o caso comum e não a exceção.
+   */
+  useEffect(() => {
+    if (!isOpen || isCoarse || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const below = window.innerHeight - rect.bottom;
+    const above = rect.top;
+    setOpensUpward(below < POPOVER_MAX_HEIGHT && above > below);
+  }, [isOpen, isCoarse]);
 
   // Scrolla opção destacada para a visão
   useEffect(() => {
@@ -89,11 +112,25 @@ export function Select<T extends string | number>({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  function handleSelect(val: T) {
-    onChange(val);
-    setIsOpen(false);
-    triggerRef.current?.focus();
-  }
+  // A folha do mobile cobre a tela: travar o corpo evita o scroll de trás
+  // acompanhar o dedo, que é o efeito mais confuso de sheet em navegador.
+  useEffect(() => {
+    if (!isOpen || !isCoarse) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isOpen, isCoarse]);
+
+  const handleSelect = useCallback(
+    (val: T) => {
+      onChange(val);
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    },
+    [onChange]
+  );
 
   function handleKeyDown(e: KeyboardEvent<HTMLButtonElement | HTMLUListElement>) {
     if (disabled) return;
@@ -182,8 +219,55 @@ export function Select<T extends string | number>({
 
   const heightClasses = size === "sm" ? "h-ctl-sm text-xs px-3" : "h-ctl text-sm px-3.5";
 
+  /** As opções são as mesmas nos dois formatos; só a moldura muda. */
+  const optionItems =
+    options.length === 0 ? (
+      <li className="px-3 py-2 text-xs text-text-disabled select-none">Nenhuma opção</li>
+    ) : (
+      options.map((option, idx) => {
+        const isSelected = option.value === value;
+        const isHighlighted = idx === highlightedIndex;
+
+        return (
+          <li
+            key={String(option.value)}
+            id={`${selectId}-opt-${idx}`}
+            role="option"
+            aria-selected={isSelected}
+            aria-disabled={option.disabled}
+            onClick={() => !option.disabled && handleSelect(option.value)}
+            onMouseEnter={() => setHighlightedIndex(idx)}
+            className={`flex items-center justify-between gap-2 px-3 text-xs md:text-sm rounded-tile cursor-pointer select-none transition-colors duration-75 ${
+              isCoarse ? "py-3.5 min-h-ctl text-sm" : "py-2"
+            } ${isHighlighted ? "bg-surface-alt text-text-primary" : "text-text-primary"} ${
+              isSelected ? "bg-primary/10 text-primary font-semibold" : ""
+            } ${option.disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+          >
+            <span className="truncate flex items-center gap-2">
+              {renderOption ? renderOption(option, isSelected) : option.label}
+            </span>
+
+            {isSelected && (
+              <svg
+                className="w-4 h-4 text-primary shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </li>
+        );
+      })
+    );
+
   return (
-    <div className={`relative inline-block w-full min-w-[160px] ${className}`}>
+    <div className={`relative inline-block w-full min-w-0 ${className}`}>
       {/* Trigger Button */}
       <button
         ref={triggerRef}
@@ -204,7 +288,7 @@ export function Select<T extends string | number>({
           disabled ? "opacity-50 cursor-not-allowed" : ""
         }`}
       >
-        <span className="truncate flex items-center gap-2">
+        <span className="truncate flex items-center gap-2 min-w-0">
           {selectedOption ? (
             renderOption ? (
               renderOption(selectedOption, true)
@@ -232,64 +316,56 @@ export function Select<T extends string | number>({
         </svg>
       </button>
 
-      {/* Popover Listbox */}
-      {isOpen && (
+      {/* No dedo, a mesma folha de rodapé dos modais: a lista sobe inteira, com
+          alvos de 44px, em vez de um popover que abre para fora da tela. */}
+      {isOpen && isCoarse &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm anim-fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsOpen(false);
+            }}
+            role="presentation"
+          >
+            <div className="w-full max-h-[70dvh] rounded-t-modal bg-surface border border-b-0 border-border shadow-sh3 flex flex-col px-3 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] anim-fade-up">
+              <div
+                aria-hidden="true"
+                className="mx-auto w-10 h-1 rounded-full bg-border-strong shrink-0 mb-3"
+              />
+              {ariaLabel && (
+                <p className="px-3 pb-2 text-overline uppercase tracking-wider text-text-secondary shrink-0">
+                  {ariaLabel}
+                </p>
+              )}
+              <ul
+                ref={listboxRef}
+                id={listboxId}
+                role="listbox"
+                tabIndex={-1}
+                aria-label={ariaLabel}
+                onKeyDown={handleKeyDown}
+                className="overflow-y-auto flex flex-col gap-0.5"
+              >
+                {optionItems}
+              </ul>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Popover Listbox — mouse */}
+      {isOpen && !isCoarse && (
         <ul
           ref={listboxRef}
           id={listboxId}
           role="listbox"
           tabIndex={-1}
           onKeyDown={handleKeyDown}
-          className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-card bg-surface p-1 shadow-sh3 border border-border anim-fade-down"
+          className={`absolute z-50 w-full max-h-64 overflow-y-auto rounded-card bg-surface p-1 shadow-sh3 border border-border ${
+            opensUpward ? "bottom-full mb-1 anim-fade-up" : "mt-1 anim-fade-down"
+          }`}
         >
-          {options.length === 0 ? (
-            <li className="px-3 py-2 text-xs text-text-disabled select-none">
-              Nenhuma opção
-            </li>
-          ) : (
-            options.map((option, idx) => {
-              const isSelected = option.value === value;
-              const isHighlighted = idx === highlightedIndex;
-
-              return (
-                <li
-                  key={String(option.value)}
-                  id={`${selectId}-opt-${idx}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  aria-disabled={option.disabled}
-                  onClick={() => !option.disabled && handleSelect(option.value)}
-                  onMouseEnter={() => setHighlightedIndex(idx)}
-                  className={`flex items-center justify-between gap-2 px-3 py-2 text-xs md:text-sm rounded-tile cursor-pointer select-none transition-colors duration-75 ${
-                    isHighlighted ? "bg-surface-alt text-text-primary" : "text-text-primary"
-                  } ${
-                    isSelected
-                      ? "bg-primary/10 text-primary font-semibold"
-                      : ""
-                  } ${option.disabled ? "opacity-40 cursor-not-allowed" : ""}`}
-                >
-                  <span className="truncate flex items-center gap-2">
-                    {renderOption ? renderOption(option, isSelected) : option.label}
-                  </span>
-
-                  {isSelected && (
-                    <svg
-                      className="w-4 h-4 text-primary shrink-0"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </li>
-              );
-            })
-          )}
+          {optionItems}
         </ul>
       )}
     </div>

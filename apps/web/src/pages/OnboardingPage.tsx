@@ -57,10 +57,22 @@ export function OnboardingPage({ onFinish }: OnboardingPageProps) {
   const slide = SLIDES[currentSlide];
 
   return (
-    <div className="min-h-dvh grid grid-cols-1 lg:grid-cols-2 bg-bg text-text-primary">
+    <div className="min-h-dvh flex flex-col lg:grid lg:grid-cols-2 bg-bg text-text-primary">
+      {/* Faixa visual do mobile. O painel da direita é `hidden lg:flex`, o que
+          deixava o celular com três telas de texto puro e nenhuma marca. */}
+      <div className="lg:hidden shrink-0 bg-primary-soft border-b border-primary/20 flex items-center justify-center gap-3 py-7 px-6">
+        <span className="w-12 h-12 rounded-card bg-surface shadow-sh2 border border-primary/20 grid place-items-center p-2.5 shrink-0">
+          <Logo className="w-full h-full text-primary" />
+        </span>
+        <span className="font-display font-extrabold text-2xl tracking-tight text-text-primary">
+          Poup<span className="text-primary">.</span>
+        </span>
+      </div>
+
       {/* Coluna Esquerda: Texto e Ações */}
-      <div className="flex flex-col justify-between p-8 md:p-16 lg:p-24 max-w-xl mx-auto w-full">
-        <div className="flex items-center gap-3">
+      <div className="flex-1 flex flex-col justify-between p-6 sm:p-8 md:p-16 lg:p-24 max-w-xl mx-auto w-full">
+        {/* No mobile a marca já está na faixa acima. */}
+        <div className="hidden lg:flex items-center gap-3">
           <Logo className="w-8 h-8 text-primary" />
           <span className="font-display font-extrabold text-2xl tracking-tight">
             Poup<span className="text-primary">.</span>
@@ -68,11 +80,11 @@ export function OnboardingPage({ onFinish }: OnboardingPageProps) {
         </div>
 
         {/* Slide Content com Crossfade */}
-        <div key={currentSlide} className="flex flex-col gap-6 my-12 anim-fade-up">
-          <h1 className="font-display font-extrabold text-4xl md:text-5xl leading-[1.12] tracking-tight">
+        <div key={currentSlide} className="flex flex-col gap-5 sm:gap-6 my-10 sm:my-12 anim-fade-up">
+          <h1 className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl leading-[1.12] tracking-tight">
             {slide.title}
           </h1>
-          <p className="text-base md:text-lg text-text-secondary leading-relaxed">
+          <p className="text-sm sm:text-base md:text-lg text-text-secondary leading-relaxed">
             {slide.description}
           </p>
 
@@ -86,7 +98,7 @@ export function OnboardingPage({ onFinish }: OnboardingPageProps) {
                 aria-selected={idx === currentSlide}
                 aria-label={`Slide ${idx + 1}`}
                 onClick={() => setCurrentSlide(idx)}
-                className={`h-2 rounded-full transition-all focus-ring ${
+                className={`tap-target h-2 rounded-full transition-all focus-ring ${
                   idx === currentSlide ? "w-8 bg-primary" : "w-2 bg-border hover:bg-border-strong"
                 }`}
               />
