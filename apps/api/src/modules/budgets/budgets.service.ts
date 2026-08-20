@@ -1,9 +1,13 @@
 import { prisma } from "../../prisma";
 import { Prisma } from "@prisma/client";
 import type { BudgetDTO, BudgetStatus } from "@poup/shared";
-import { BudgetNotFoundError, CategoryNotFoundError } from "../../lib/errors";
+import {
+  BudgetNotFoundError,
+  CategoryNotFoundError,
+  SystemCategoryError,
+} from "../../lib/errors";
 
-export { BudgetNotFoundError, CategoryNotFoundError };
+export { BudgetNotFoundError, CategoryNotFoundError, SystemCategoryError };
 
 function parseMonth(monthStr?: string): [number, number] {
   if (monthStr && /^\d{4}-\d{2}$/.test(monthStr)) {
@@ -86,6 +90,9 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
   });
   if (!category) {
     throw new CategoryNotFoundError();
+  }
+  if (category.systemKey) {
+    throw new SystemCategoryError();
   }
 
   const budget = await prisma.budget.upsert({

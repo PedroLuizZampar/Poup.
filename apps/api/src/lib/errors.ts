@@ -133,3 +133,15 @@ export class UserNotFoundError extends NotFoundError {
     super("Usuário não encontrado");
   }
 }
+
+export class SystemCategoryError extends BadRequestError {
+  constructor() {
+    super("Esta categoria é mantida pelo Poup e não pode ser editada ou excluída");
+  }
+}
+
+export class SuggestionNotFoundError extends NotFoundError {
+  constructor() {
+    super("Sugestão não encontrada");
+  }
+}

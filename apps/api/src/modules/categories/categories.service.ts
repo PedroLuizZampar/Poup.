@@ -1,7 +1,13 @@
+import { TransactionType } from "@prisma/client";
 import { prisma } from "../../prisma";
-import { CategoryAlreadyExistsError, CategoryNotFoundError } from "../../lib/errors";
+import {
+  CategoryAlreadyExistsError,
+  CategoryNotFoundError,
+  SystemCategoryError,
+} from "../../lib/errors";
+import { ensureSystemCategories } from "../../lib/systemCategories";
 
-export { CategoryAlreadyExistsError, CategoryNotFoundError };
+export { CategoryAlreadyExistsError, CategoryNotFoundError, SystemCategoryError };
 
 /** Chaves da paleta de categorias (cat-1 … cat-24 no tema do desktop). */
 const VALID_COLOR_KEYS = Array.from({ length: 24 }, (_, i) => String(i + 1));
@@ -70,6 +76,10 @@ export async function updateCategory(userId: string, id: string, input: UpdateCa
     throw new CategoryNotFoundError();
   }
 
+  if (existing.systemKey) {
+    throw new SystemCategoryError();
+  }
+
   if (input.name) {
     const trimmedName = input.name.trim();
     if (trimmedName !== existing.name) {
@@ -102,6 +112,12 @@ export async function updateCategory(userId: string, id: string, input: UpdateCa
   });
 }
 
+/**
+ * Excluir uma categoria não pode reintroduzir o estado "sem categoria nenhuma":
+ * o `onDelete: SetNull` do schema faria exatamente isso. Por isso as transações
+ * são reatribuídas às ocultas antes, e tudo roda numa transação — meio caminho
+ * aqui deixaria linhas nulas para trás.
+ */
 export async function deleteCategory(userId: string, id: string) {
   const existing = await prisma.category.findFirst({
     where: { id, userId },
@@ -111,8 +127,23 @@ export async function deleteCategory(userId: string, id: string) {
     throw new CategoryNotFoundError();
   }
 
-  await prisma.category.delete({
-    where: { id },
+  if (existing.systemKey) {
+    throw new SystemCategoryError();
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const systemIds = await ensureSystemCategories(tx, userId);
+
+    await tx.transaction.updateMany({
+      where: { userId, categoryId: id, type: TransactionType.EXPENSE },
+      data: { categoryId: systemIds.UNCATEGORIZED_EXPENSE },
+    });
+    await tx.transaction.updateMany({
+      where: { userId, categoryId: id, type: TransactionType.INCOME },
+      data: { categoryId: systemIds.UNCATEGORIZED_INCOME },
+    });
+
+    await tx.category.delete({ where: { id } });
   });
 
   return { success: true };
