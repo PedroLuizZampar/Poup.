@@ -33,6 +33,25 @@ enum ItemStatus {
   ERROR
 }
 
+enum SystemCategoryKey {
+  TRANSFER
+  UNCATEGORIZED_EXPENSE
+  UNCATEGORIZED_INCOME
+}
+
+enum SuggestionSource {
+  HISTORY
+  RULE
+  PLUGGY
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  CHANGED
+  DISMISSED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -55,6 +74,7 @@ model User {
   budgets       Budget[]
   goals         Goal[]
   notifications Notification[]
+  categorySuggestions CategorySuggestion[]
 }
 
 model Item {
@@ -112,13 +132,19 @@ model Category {
   name      String
   icon      String
   colorKey  String
+  /// Marca as categorias que o app cria e mantém. Não aparecem em seletores,
+  /// não podem ser renomeadas nem excluídas, e não aceitam orçamento. Existem
+  /// para que nenhuma transação precise ficar com `categoryId` nulo.
+  systemKey SystemCategoryKey?
   createdAt DateTime @default(now())
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions  Transaction[]
   budgets       Budget[]
+  suggestions   CategorySuggestion[] @relation("SuggestedCategory")
 
   @@unique([userId, name])
+  @@unique([userId, systemKey])
 }
 
 model Transaction {
@@ -133,15 +159,20 @@ model Transaction {
   date                DateTime
   note                String?
   isRecurring         Boolean          @default(false)
+  /// Une as duas pontas de uma transferência interna detectada. Torna o
+  /// pareamento idempotente e permite desfazer nas duas pontas de uma vez.
+  transferPairId      String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account    Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category   Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  suggestion CategorySuggestion?
 
   @@index([userId, date])
   @@index([categoryId])
+  @@index([transferPairId])
 }
 
 model Budget {
@@ -184,9 +215,33 @@ model Notification {
   body      String
   severity  NotificationSeverity @default(INFO)
   read      Boolean              @default(false)
+  /// Rota do app para onde o item leva quando tocado. Null = só informativo.
+  link      String?
   createdAt DateTime             @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read])
+}
+
+model CategorySuggestion {
+  id                 String           @id @default(uuid())
+  userId             String
+  transactionId      String           @unique
+  categoryId         String
+  source             SuggestionSource
+  /// 0..1. Em HISTORY é a fração do histórico daquele comerciante que caiu
+  /// nesta categoria; em RULE e PLUGGY é um valor fixo.
+  confidence         Float
+  status             SuggestionStatus @default(PENDING)
+  /// A categoria que o usuário de fato escolheu, quando trocou a sugerida.
+  resolvedCategoryId String?
+  resolvedAt         DateTime?
+  createdAt          DateTime         @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  category    Category    @relation("SuggestedCategory", fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }

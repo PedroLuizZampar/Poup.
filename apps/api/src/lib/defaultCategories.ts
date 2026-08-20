@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { ensureSystemCategories } from "./systemCategories";
 
 /**
  * Categorias com que toda conta nasce. Vivem aqui — e não no seed — porque o
@@ -31,6 +32,10 @@ export async function createDefaultCategories(
       create: { ...category, userId },
     });
   }
+
+  // As de sistema vêm junto: conta nova já nasce podendo receber transação sem
+  // que exista o estado "sem categoria nenhuma".
+  await ensureSystemCategories(client, userId);
 
   return DEFAULT_CATEGORIES.length;
 }
