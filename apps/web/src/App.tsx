@@ -8,6 +8,7 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { AppLayout } from "./components/layout/AppLayout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
+import { ReviewPage } from "./pages/ReviewPage";
 import { CategoriesPage } from "./pages/CategoriesPage";
 import { PlanningPage } from "./pages/PlanningPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -109,6 +110,7 @@ export function App() {
                 <Route element={<AppLayout user={user} onLoggedOut={() => setUser(null)} />}>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/transacoes" element={<TransactionsPage />} />
+                  <Route path="/revisao" element={<ReviewPage />} />
                   <Route path="/categorias" element={<CategoriesPage />} />
                   <Route path="/planejamento" element={<PlanningPage />} />
                   <Route path="/relatorios" element={<ReportsPage />} />
