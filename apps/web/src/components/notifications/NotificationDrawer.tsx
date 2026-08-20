@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import type { NotificationDTO } from "@poup/shared";
 import {
@@ -21,6 +22,7 @@ export function NotificationDrawer({
   onClose,
   onUpdateUnread,
 }: NotificationDrawerProps) {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,19 @@ export function NotificationDrawer({
     } catch (err) {
       console.error("Erro ao marcar como lida:", err);
     }
+  }
+
+  /**
+   * Navegar importa mais que o "lida": se a marcação falhar, a notificação
+   * continua ali e o usuário chega onde queria mesmo assim.
+   */
+  async function handleOpen(n: NotificationDTO) {
+    if (!n.link) return;
+    if (!n.read) {
+      await handleMarkRead(n.id).catch(() => {});
+    }
+    onClose();
+    navigate(n.link);
   }
 
   async function handleMarkAllRead() {
@@ -165,46 +180,17 @@ export function NotificationDrawer({
             const isError = n.severity === "ERROR";
             const isWarning = n.severity === "WARNING";
 
-            return (
-              <div
-                key={n.id}
-                className={`p-3 rounded-card border transition-all flex flex-col gap-1.5 ${
-                  n.read
-                    ? "bg-surface border-border/60 opacity-60"
-                    : isError
-                    ? "bg-error-soft border-error/20"
-                    : isWarning
-                    ? "bg-warning-soft border-warning/20"
-                    : "bg-surface-alt border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full shrink-0 ${
-                        isError
-                          ? "bg-error"
-                          : isWarning
-                          ? "bg-warning"
-                          : "bg-primary"
-                      }`}
-                    />
-                    <span className="font-display font-bold text-xs text-text-primary">
-                      {n.title}
-                    </span>
-                  </div>
-
-                  {!n.read && (
-                    <button
-                      type="button"
-                      onClick={() => handleMarkRead(n.id)}
-                      title="Marcar como lida"
-                      aria-label="Marcar como lida"
-                      className="tap-target text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer"
-                    >
-                      <CheckIcon className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+            const conteudo = (
+              <>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      isError ? "bg-error" : isWarning ? "bg-warning" : "bg-primary"
+                    }`}
+                  />
+                  <span className="font-display font-bold text-xs text-text-primary">
+                    {n.title}
+                  </span>
                 </div>
 
                 <p className="text-caption text-text-secondary leading-relaxed pl-4">
@@ -214,6 +200,54 @@ export function NotificationDrawer({
                 <span className="text-[10px] text-text-disabled pl-4 tnum">
                   {formatDateTime(n.createdAt)}
                 </span>
+              </>
+            );
+
+            return (
+              <div
+                key={n.id}
+                className={`p-3 rounded-card border transition-all flex items-start justify-between gap-2 ${
+                  n.read
+                    ? "bg-surface border-border/60 opacity-60"
+                    : isError
+                    ? "bg-error-soft border-error/20"
+                    : isWarning
+                    ? "bg-warning-soft border-warning/20"
+                    : "bg-surface-alt border-border"
+                }`}
+              >
+                {/* O botão de "marcar como lida" fica FORA da área clicável,
+                    para que tocá-lo não navegue junto. */}
+                {n.link ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void handleOpen(n)}
+                    onKeyDown={(e: React.KeyboardEvent) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void handleOpen(n);
+                      }
+                    }}
+                    className="flex-1 min-w-0 flex flex-col gap-1.5 cursor-pointer focus-ring rounded-ctl"
+                  >
+                    {conteudo}
+                  </div>
+                ) : (
+                  <div className="flex-1 min-w-0 flex flex-col gap-1.5">{conteudo}</div>
+                )}
+
+                {!n.read && (
+                  <button
+                    type="button"
+                    onClick={() => handleMarkRead(n.id)}
+                    title="Marcar como lida"
+                    aria-label="Marcar como lida"
+                    className="tap-target text-text-disabled hover:text-primary transition-colors p-1 rounded-ctl focus-ring cursor-pointer shrink-0"
+                  >
+                    <CheckIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             );
           })
