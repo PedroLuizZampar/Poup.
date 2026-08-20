@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT
+  INVESTMENT
+}
+
+enum ItemStatus {
+  UPDATING
+  UPDATED
+  LOGIN_ERROR
+  OUTDATED
+  ERROR
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  /// Foto de perfil como data URL (base64). Enviada pelo app já redimensionada.
+  avatarUrl    String?  @db.Text
+  /// Credenciais da aplicação Pluggy do usuário. Ficam por usuário — e não no
+  /// ambiente — para que cada conta fale com a Pluggy com a própria aplicação.
+  /// O secret é guardado cifrado (AES-256-GCM, ver src/lib/crypto.ts).
+  pluggyClientId     String?
+  pluggyClientSecret String? @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items         Item[]
+  accounts      Account[]
+  categories    Category[]
+  transactions  Transaction[]
+  budgets       Budget[]
+  goals         Goal[]
+  notifications Notification[]
+}
+
+model Item {
+  id             String     @id @default(uuid())
+  userId         String
+  pluggyItemId   String     @unique
+  institutionName String
+  /// Logo do conector, servida pela Pluggy (CDN). Pode ser sobrescrita por um
+  /// arquivo local em apps/desktop/public/institutions/<slug>.(svg|png).
+  institutionImageUrl String?
+  /// Cor primária da marca informada pelo conector, usada como fundo do logo.
+  institutionColor    String?
+  /// Logo escolhida manualmente pelo usuário, como data URL (base64). Vive numa
+  /// coluna separada de `institutionImageUrl` justamente para que o sync — que
+  /// só escreve aquela — nunca sobrescreva a escolha do usuário.
+  customImageUrl      String?    @db.Text
+  status         ItemStatus @default(UPDATING)
+  lastSyncedAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts Account[]
+
+  @@index([userId])
+}
+
+model Account {
+  id               String      @id @default(uuid())
+  userId           String
+  itemId           String?
+  pluggyAccountId  String?     @unique
+  name             String
+  /// Nome dado pelo usuário. Tem precedência sobre `name`, que o sync reescreve
+  /// a cada atualização a partir dos dados da Pluggy.
+  customName       String?
+  type             AccountType
+  balance          Decimal     @default(0) @db.Decimal(14, 2)
+  institutionName  String?
+  lastSyncedAt     DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item         Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+  goals        Goal[]
+
+  @@index([userId])
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  icon      String
+  colorKey  String
+  createdAt DateTime @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  budgets       Budget[]
+
+  @@unique([userId, name])
+}
+
+model Transaction {
+  id                  String           @id @default(uuid())
+  userId              String
+  accountId           String
+  categoryId          String?
+  pluggyTransactionId String?          @unique
+  description         String
+  amount              Decimal          @db.Decimal(14, 2)
+  type                TransactionType
+  date                DateTime
+  note                String?
+  isRecurring         Boolean          @default(false)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
+  @@index([categoryId])
+}
+
+model Budget {
+  id           String   @id @default(uuid())
+  userId       String
+  categoryId   String
+  monthlyLimit Decimal  @db.Decimal(14, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+}
+
+model Goal {
+  id            String    @id @default(uuid())
+  userId        String
+  /// Conta cujo saldo é o acumulado da meta. Obrigatória na API; nullable aqui
+  /// para que excluir a conta não leve a meta junto — ela fica órfã e a UI pede
+  /// que o usuário vincule outra.
+  accountId     String?
+  name          String
+  targetAmount  Decimal   @db.Decimal(14, 2)
+  targetDate    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  severity  NotificationSeverity @default(INFO)
+  read      Boolean              @default(false)
+  createdAt DateTime             @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}

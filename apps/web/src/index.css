@@ -1,0 +1,293 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Superfícies — tema claro */
+  --bg:                 #F6FAF7;
+  --bg-rgb:             246 250 247;
+  --surface:            #FFFFFF;
+  --surface-rgb:        255 255 255;
+  --surface-alt:        #EDF3EF;
+  --surface-alt-rgb:    237 243 239;
+  --surface-sunken:     #E7EFEA;
+  --surface-sunken-rgb: 231 239 234;
+  --border:             #E1E8E3;
+  --border-rgb:         225 232 227;
+  --border-strong:      #CBD8D0;
+  --border-strong-rgb:  203 216 208;
+
+  /* Texto */
+  --text-primary:   #16211C;
+  --text-secondary: #6B7A72;
+  --text-disabled:  #A7B3AD;
+
+  /* Marca e ação */
+  --primary:        #1F7A54;
+  --primary-hover:  #196546;
+  --primary-active: #155C3F;
+  --primary-soft:   #A8E6C3;
+  --primary-ghost:  rgba(31,122,84,.08);
+  --on-primary:     #FFFFFF;
+
+  /* Semânticas */
+  --income:  #22C55E;
+  --expense: #E85D4C;
+  --warning: #F5A524;
+  --error:   #DC2626;
+  --info:    #1E6A80;
+
+  /* Fundo suave das semânticas */
+  --income-soft:  rgba(34,197,94,.10);
+  --expense-soft: rgba(232,93,76,.10);
+  --warning-soft: rgba(245,165,36,.12);
+  --error-soft:   rgba(220,38,38,.10);
+
+  /* Categorias — 12 pares fundo/traço semânticos e variados */
+  --cat-1-bg: #CFEBDC;  --cat-1-fg: #1F7A54; /* Esmeralda / Verde */
+  --cat-2-bg: #DBEAFE;  --cat-2-fg: #2563EB; /* Azul Real */
+  --cat-3-bg: #EDE9FE;  --cat-3-fg: #7C3AED; /* Roxo */
+  --cat-4-bg: #FEF3C7;  --cat-4-fg: #B45309; /* Âmbar */
+  --cat-5-bg: #FFE4E6;  --cat-5-fg: #E11D48; /* Rose / Carmim */
+  --cat-6-bg: #CCFBF1;  --cat-6-fg: #0D9488; /* Teal / Turquesa */
+  --cat-7-bg: #E0E7FF;  --cat-7-fg: #4F46E5; /* Índigo */
+  --cat-8-bg: #FCE7F3;  --cat-8-fg: #DB2777; /* Pink / Magenta */
+  --cat-9-bg: #FFEDD5;  --cat-9-fg: #EA580C; /* Laranja */
+  --cat-10-bg: #CFFAFE; --cat-10-fg: #0891B2; /* Ciano */
+  --cat-11-bg: #ECFCCB; --cat-11-fg: #4D7C0F; /* Lima */
+  --cat-12-bg: #F1F5F9; --cat-12-fg: #475569; /* Cinza Grafite */
+  --cat-13-bg: #FEE2E2;  --cat-13-fg: #B91C1C; /* Vermelho */
+  --cat-14-bg: #FBE5D6;  --cat-14-fg: #9A3412; /* Terracota */
+  --cat-15-bg: #EDE3DA;  --cat-15-fg: #78543A; /* Café */
+  --cat-16-bg: #FBF0CE;  --cat-16-fg: #A16207; /* Mostarda */
+  --cat-17-bg: #E9EEC9;  --cat-17-fg: #646B26; /* Oliva */
+  --cat-18-bg: #D7EBDC;  --cat-18-fg: #15803D; /* Floresta */
+  --cat-19-bg: #DFE9E2;  --cat-19-fg: #4B7A63; /* Sálvia */
+  --cat-20-bg: #D5E6EA;  --cat-20-fg: #0E6E7E; /* Petróleo */
+  --cat-21-bg: #DCE3F3;  --cat-21-fg: #1E3A8A; /* Marinho */
+  --cat-22-bg: #E1E6EC;  --cat-22-fg: #334155; /* Ardósia */
+  --cat-23-bg: #ECDEE9;  --cat-23-fg: #86198F; /* Fúcsia */
+  --cat-24-bg: #F2DDE3;  --cat-24-fg: #9F1239; /* Vinho */
+
+  /* Elevação */
+  --sh1: 0 1px 2px rgba(0,0,0,.06);
+  --sh2: 0 4px 14px rgba(0,0,0,.07);
+  --sh3: 0 16px 40px rgba(0,0,0,.10);
+  --ring: 0 0 0 3px rgba(31,122,84,.28);
+  --focus-color:  #1F7A54;
+  --focus-width:  2px;
+  --focus-offset: 2px;
+
+  /* Motion Tokens */
+  --dur-instant: 80ms;
+  --dur-fast:    140ms;
+  --dur-base:    200ms;
+  --dur-slow:    320ms;
+
+  --ease-out:    cubic-bezier(.22, 1, .36, 1);
+  --ease-in:     cubic-bezier(.55, 0, 1, .45);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+}
+
+.dark {
+  /* Cinza neutro puro e grafite escuro suave */
+  --bg:                 #0F0F10;
+  --bg-rgb:             15 15 16;
+  --surface:            #17181A;
+  --surface-rgb:        23 24 26;
+  --surface-alt:        #1E2023;
+  --surface-alt-rgb:    30 32 35;
+  --surface-sunken:     #121314;
+  --surface-sunken-rgb: 18 19 20;
+  --border:             #22252A;
+  --border-rgb:         34 37 42;
+  --border-strong:      #2E323A;
+  --border-strong-rgb:  46 50 58;
+
+  --text-primary:   #E9EAEC;
+  --text-secondary: #9A9DA3;
+  --text-disabled:  #6B6E74;
+
+  /* Verde clareado */
+  --primary:        #34A06B;
+  --primary-hover:  #3EB278;
+  --primary-active: #2B8C5C;
+  --primary-soft:   rgba(52,160,107,.18);
+  --primary-ghost:  rgba(52,160,107,.10);
+  --on-primary:     #0F0F10;
+
+  --income:  #3DD37F;
+  --expense: #F0796A;
+  --warning: #F7B84B;
+  --error:   #F87171;
+  --info:    #56AECB;
+
+  --income-soft:  rgba(61,211,127,.14);
+  --expense-soft: rgba(240,121,106,.14);
+  --warning-soft: rgba(247,184,75,.14);
+  --error-soft:   rgba(248,113,113,.14);
+
+  /* Categorias */
+  --cat-1-bg: rgba(52,160,107,.18);  --cat-1-fg: #6FCF9B;
+  --cat-2-bg: rgba(59,130,246,.18);  --cat-2-fg: #93C5FD;
+  --cat-3-bg: rgba(139,92,246,.18);  --cat-3-fg: #C4B5FD;
+  --cat-4-bg: rgba(245,158,11,.18);  --cat-4-fg: #FCD34D;
+  --cat-5-bg: rgba(244,63,94,.18);   --cat-5-fg: #FDA4AF;
+  --cat-6-bg: rgba(20,184,166,.18);  --cat-6-fg: #5EEAD4;
+  --cat-7-bg: rgba(99,102,241,.18);  --cat-7-fg: #A5B4FC;
+  --cat-8-bg: rgba(236,72,153,.18);  --cat-8-fg: #F9A8D4;
+  --cat-9-bg: rgba(249,115,22,.18);  --cat-9-fg: #FDBA74;
+  --cat-10-bg: rgba(6,182,212,.18);  --cat-10-fg: #67E8F9;
+  --cat-11-bg: rgba(132,204,22,.18); --cat-11-fg: #BEF264;
+  --cat-12-bg: rgba(148,163,184,.18);--cat-12-fg: #CBD5E1;
+  --cat-13-bg: rgba(239,68,68,.18);   --cat-13-fg: #FCA5A5; /* Vermelho */
+  --cat-14-bg: rgba(194,65,12,.22);   --cat-14-fg: #F0A883; /* Terracota */
+  --cat-15-bg: rgba(146,110,80,.24);  --cat-15-fg: #D6B79A; /* Café */
+  --cat-16-bg: rgba(202,138,4,.20);   --cat-16-fg: #E8C45C; /* Mostarda */
+  --cat-17-bg: rgba(132,146,40,.24);  --cat-17-fg: #C3CE7A; /* Oliva */
+  --cat-18-bg: rgba(22,163,74,.18);   --cat-18-fg: #7BD69B; /* Floresta */
+  --cat-19-bg: rgba(94,140,116,.26);  --cat-19-fg: #A7C9B6; /* Sálvia */
+  --cat-20-bg: rgba(14,116,144,.22);  --cat-20-fg: #7FC5D6; /* Petróleo */
+  --cat-21-bg: rgba(37,60,160,.26);   --cat-21-fg: #A3B4E8; /* Marinho */
+  --cat-22-bg: rgba(100,116,139,.24); --cat-22-fg: #B3BECD; /* Ardósia */
+  --cat-23-bg: rgba(162,28,175,.20);  --cat-23-fg: #E9A6EE; /* Fúcsia */
+  --cat-24-bg: rgba(190,24,93,.20);   --cat-24-fg: #F2A0B8; /* Vinho */
+
+  --sh1: 0 1px 2px rgba(0,0,0,.40);
+  --sh2: 0 4px 14px rgba(0,0,0,.45);
+  --sh3: 0 16px 40px rgba(0,0,0,.55);
+  --ring: 0 0 0 3px rgba(52,160,107,.35);
+  --focus-color: #4FBF89;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-instant: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Keyframes */
+@keyframes fadeIn     { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fadeOut    { from { opacity: 1 } to { opacity: 0 } }
+@keyframes fadeUp     { from { opacity: 0; transform: translateY(8px) }  to { opacity: 1; transform: none } }
+@keyframes fadeDown   { from { opacity: 0; transform: translateY(-6px) } to { opacity: 1; transform: none } }
+@keyframes scaleIn    { from { opacity: 0; transform: scale(.97) }       to { opacity: 1; transform: none } }
+@keyframes slideRight { from { opacity: 0; transform: translateX(-12px) } to { opacity: 1; transform: none } }
+@keyframes shimmer     { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+
+.anim-fade-in {
+  animation: fadeIn var(--dur-base) var(--ease-out) forwards;
+  backface-visibility: hidden;
+}
+.anim-fade-out {
+  animation: fadeOut var(--dur-fast) var(--ease-in) forwards;
+  backface-visibility: hidden;
+}
+.anim-fade-up {
+  animation: fadeUp var(--dur-base) var(--ease-out) forwards;
+  backface-visibility: hidden;
+}
+.anim-fade-down {
+  animation: fadeDown var(--dur-fast) var(--ease-out) forwards;
+  backface-visibility: hidden;
+}
+.anim-scale-in {
+  animation: scaleIn var(--dur-base) var(--ease-out) forwards;
+  backface-visibility: hidden;
+}
+.anim-slide-right {
+  animation: slideRight var(--dur-base) var(--ease-out) forwards;
+  backface-visibility: hidden;
+}
+
+.shimmer-effect {
+  background: linear-gradient(90deg, var(--surface-alt) 0%, var(--surface-sunken) 50%, var(--surface-alt) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+/* ---------------------------------------------------------------------------
+   Foco de teclado
+   O contorno nativo do Chrome (branco no modo escuro, cantos retos) é removido
+   e substituído por um anel próprio. Usamos `outline` e não `box-shadow`:
+   o outline já acompanha o border-radius do elemento, não conflita com as
+   sombras de elevação e não exige herdar raio de lugar nenhum.
+   --------------------------------------------------------------------------- */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Foco por clique/toque não desenha anel. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Foco por teclado desenha o anel da marca, com o raio do próprio elemento. */
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Superfícies internas (dropdowns, diálogos) recebem foco programático e não
+   devem exibir anel. */
+[role="dialog"]:focus-visible,
+[role="listbox"]:focus-visible,
+[data-focus-silent]:focus-visible {
+  outline: none;
+}
+
+/* Alias legado: o anel agora é global, então a classe é apenas um marcador. */
+.focus-ring:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Scrollbars temáticos da aplicação */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* O preflight do Tailwind define `border-color: #e5e7eb` em todos os elementos.
+   Ancoramos esse padrão no token do tema para que nenhuma borda escape em branco. */
+*, *::before, *::after {
+  border-color: var(--border);
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

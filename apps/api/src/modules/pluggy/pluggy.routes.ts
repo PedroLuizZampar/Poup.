@@ -1,0 +1,78 @@
+import { Router } from "express";
+import { z } from "zod";
+import {
+  syncUserItem,
+  syncAllItems,
+  addItemById,
+  listItems,
+  deleteItem,
+  updateItemImage,
+} from "./pluggy.service";
+import { requireAuth } from "../../middleware/requireAuth";
+import { asyncHandler } from "../../middleware/errorHandler";
+
+export const pluggyRouter = Router();
+
+pluggyRouter.use(requireAuth);
+
+const syncItemSchema = z.object({
+  pluggyItemId: z.string().optional(),
+});
+
+const updateItemImageSchema = z.object({
+  imageUrl: z.string().nullable(),
+});
+
+const addItemSchema = z.object({
+  pluggyItemId: z.string().trim().min(1, "Informe o id do item"),
+});
+
+pluggyRouter.post(
+  "/sync",
+  asyncHandler(async (req, res) => {
+    const parsed = syncItemSchema.parse(req.body ?? {});
+
+    // Sem id, sincroniza tudo o que é do usuário. Com id, `syncUserItem`
+    // resolve o item pelo par (userId, pluggyItemId) e devolve 404 se não for
+    // dele — o id sozinho não prova nada, é único global.
+    const result = parsed.pluggyItemId
+      ? await syncUserItem(req.userId!, parsed.pluggyItemId)
+      : await syncAllItems(req.userId!);
+
+    res.json(result);
+  })
+);
+
+pluggyRouter.post(
+  "/items",
+  asyncHandler(async (req, res) => {
+    const { pluggyItemId } = addItemSchema.parse(req.body);
+    const result = await addItemById(req.userId!, pluggyItemId);
+    res.status(201).json(result);
+  })
+);
+
+pluggyRouter.get(
+  "/items",
+  asyncHandler(async (req, res) => {
+    const items = await listItems(req.userId!);
+    res.json({ items });
+  })
+);
+
+pluggyRouter.patch(
+  "/items/:id/image",
+  asyncHandler(async (req, res) => {
+    const { imageUrl } = updateItemImageSchema.parse(req.body);
+    const item = await updateItemImage(req.userId!, req.params.id, imageUrl);
+    res.json({ item });
+  })
+);
+
+pluggyRouter.delete(
+  "/items/:id",
+  asyncHandler(async (req, res) => {
+    await deleteItem(req.userId!, req.params.id);
+    res.json({ success: true });
+  })
+);
