@@ -45,48 +45,61 @@ Poup/
 8. CRUD de transações (filtros por mês/conta/categoria/tipo/busca, edição, categorização, marcar como recorrente)
 9. Autenticação Pluggy (troca client id/secret por `apiKey`, cache em memória com renovação — o token expira em ~2h)
 10. Sync: resolve o `Item` pelo par `(userId, pluggyItemId)`, importa contas e transações, deduplica por `pluggyTransactionId`
-11. Auto-categorização por palavras-chave (`apps/api/src/lib/categorization/`)
+11. Motor de palpite de categoria (`apps/api/src/lib/categorization/`): histórico
+    do próprio usuário, tabela de palavras-chave e categoria da Pluggy, nessa ordem
 12. Nomes de instituição por tabela COMPE + nome do conector (`apps/api/src/lib/institutions.ts`)
 13. Orçamentos: gasto por categoria/mês, status (ok/atenção/estourado)
 14. Metas: progresso e ritmo mensal necessário, a partir do saldo da conta vinculada
 15. Notificações de orçamento no limite e estourado, geradas no `POST /notifications/check`
 16. `GET /reports/summary`: totais do período somados no banco (por tipo, por categoria e série mensal)
 17. Erros como classes com status próprio + middleware único de tratamento
+18. Categorização sugerida: o sync deixa de aplicar categoria e passa a gravar
+    sugestões pendentes (`CategorySuggestion`); toda transação nasce numa das
+    três categorias de sistema (`Category.systemKey`), que não aparecem em
+    seletores nem aceitam orçamento
+19. Transferência entre contas do próprio usuário detectada por valor + data +
+    contas (`src/lib/categorization/transfers.ts`), com as duas pontas fora dos
+    relatórios; cobre o caso da poupança, em que as duas pontas têm o mesmo sinal
+20. Aplicar categoria em transações parecidas, por similaridade de descrição
+    (`GET /transactions/:id/similar`, `POST /transactions/bulk-categorize`)
 
 ### Frontend
-18. App React + Vite: roteamento e layout base
-19. Design system: tokens do protótipo → Tailwind config, com tema claro/escuro
-20. Onboarding (por usuário, depois do login)
-21. Dashboard
-22. Transações + modal de detalhe/categorização
-23. Planejamento: abas de orçamentos e metas
-24. Relatórios (distribuição por categoria, por período)
-25. Categorias (criar, editar, excluir, com gasto do mês)
-26. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro)
-27. Skeletons de carregamento, estados vazios, toasts e diálogos de confirmação
-28. Painel de notificações
+21. App React + Vite: roteamento e layout base
+22. Design system: tokens do protótipo → Tailwind config, com tema claro/escuro
+23. Onboarding (por usuário, depois do login)
+24. Dashboard
+25. Transações + modal de detalhe/categorização
+26. Planejamento: abas de orçamentos e metas
+27. Relatórios (distribuição por categoria, por período)
+28. Categorias (criar, editar, excluir, com gasto do mês)
+29. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro)
+30. Skeletons de carregamento, estados vazios, toasts e diálogos de confirmação
+31. Painel de notificações, com item clicável quando a notificação leva a uma rota
+32. Tela de revisão (`/revisao`), uma sugestão por vez, alcançável pela
+    notificação e pelo botão "Sugestões" com contador no Dashboard e em
+    Transações
 
 ### Mobile
-29. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
+33. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
     ela nenhuma rota era alcançável no celular a não ser digitando a URL
-30. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
+34. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
     toque, e a tabela de transações vira lista de cards
-31. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
+35. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
     alvos de toque de 44px via `.tap-target`, `dvh` no lugar de `vh`
-32. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
+36. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
 
 ### PWA
-33. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
+37. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
     ícones) e **`NetworkOnly` para `/api/*`** — saldo servido do cache sem aviso
     é pior que tela vazia
-34. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
+38. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
     partir do `Logo.tsx`
-35. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
+39. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
     render-block do CDN do Google e entra fonte precacheável
-36. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
+40. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
     manuais do iOS quando não há prompt; banner de versão nova em vez de recarga
     automática
-37. Tela de sem conexão honesta, e sessão preservada quando o servidor não
+41. Tela de sem conexão honesta, e sessão preservada quando o servidor não
     responde — falha de rede deixou de ser tratada como sessão expirada
 
 ## Backlog (planejado, **não** implementado)
@@ -105,7 +118,9 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 
 Outros pendentes conhecidos:
 
-- **Sem teste automatizado.** Toda mudança é verificada à mão.
+- **Teste automatizado só na lib de categorização.** `npm run test --workspace=apps/api`
+  cobre normalização, similaridade, pareamento de transferência e o motor de
+  palpite. Rotas, pipeline e telas seguem verificados à mão.
 - **Dois sistemas de ícone** convivem: `Icons.tsx` (feito à mão) e `lucide-react` (usado por `categoryIcons.tsx`).
 - **Dinheiro trafega como `number`** nos DTOs. Os agregados já são somados no banco; o que resta é a exibição.
 
