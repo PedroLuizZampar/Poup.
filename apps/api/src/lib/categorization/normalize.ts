@@ -39,7 +39,11 @@ export function normalizeDescription(raw: string): string {
 
   return cleaned
     .split(" ")
-    .filter((token) => token.length > 0 && !STOPWORDS.has(token))
+    // Tokens de uma ou duas letras são sigla de estado ("SP", "RJ") ou ligação
+    // ("do", "de"). Mantê-los empurra o nome real do comerciante para fora dos
+    // três primeiros tokens da chave, que é justamente o que ela não pode
+    // deixar acontecer.
+    .filter((token) => token.length > 2 && !STOPWORDS.has(token))
     .join(" ");
 }
 
@@ -51,9 +55,5 @@ export function normalizeDescription(raw: string): string {
 export function merchantKey(raw: string): string | null {
   const key = normalizeDescription(raw).split(" ").slice(0, 3).join(" ").trim();
   if (key.length < 3) return null;
-  // Sem nenhuma letra sobrou só o que a normalização não teve como limpar —
-  // números curtos de agência, terminal, parcela. Isso não é um comerciante, e
-  // indexá-lo casaria transações que só têm em comum um id parecido.
-  if (!/[a-z]/.test(key)) return null;
   return key;
 }
