@@ -6,6 +6,10 @@ import {
   createTransaction,
   updateTransaction,
 } from "./transactions.service";
+import {
+  bulkCategorize,
+  findSimilarTransactions,
+} from "../categorization/similar.service";
 import { ForbiddenError, TransactionNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
 import { asyncHandler } from "../../middleware/errorHandler";
@@ -52,6 +56,28 @@ transactionsRouter.get(
     const filters = queryFilterSchema.parse(req.query);
     const transactions = await listTransactions(req.userId!, filters);
     res.json({ transactions });
+  })
+);
+
+const bulkCategorizeSchema = z.object({
+  transactionIds: z.array(z.string().min(1)).min(1, "Selecione ao menos uma transação"),
+  categoryId: z.string().min(1, "Categoria é obrigatória"),
+});
+
+// Antes de "/:id": sem isso o Express casaria "bulk-categorize" como um id.
+transactionsRouter.post(
+  "/bulk-categorize",
+  asyncHandler(async (req, res) => {
+    const { transactionIds, categoryId } = bulkCategorizeSchema.parse(req.body);
+    res.json(await bulkCategorize(req.userId!, transactionIds, categoryId));
+  })
+);
+
+transactionsRouter.get(
+  "/:id/similar",
+  asyncHandler(async (req, res) => {
+    const categoryId = z.string().min(1).parse(req.query.categoryId);
+    res.json(await findSimilarTransactions(req.userId!, req.params.id, categoryId));
   })
 );
 
