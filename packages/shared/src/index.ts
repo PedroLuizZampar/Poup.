@@ -132,6 +132,8 @@ export interface NotificationDTO {
   body: string;
   severity: "INFO" | "WARNING" | "ERROR";
   read: boolean;
+  /** Rota do app para onde o item leva. Null = só informativo. */
+  link: string | null;
   createdAt: string;
 }
 

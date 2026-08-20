@@ -8,6 +8,7 @@ import {
   deleteItem,
   updateItemImage,
 } from "./pluggy.service";
+import { createReviewNotification } from "../notifications/notifications.service";
 import { requireAuth } from "../../middleware/requireAuth";
 import { asyncHandler } from "../../middleware/errorHandler";
 
@@ -39,6 +40,8 @@ pluggyRouter.post(
       ? await syncUserItem(req.userId!, parsed.pluggyItemId)
       : await syncAllItems(req.userId!);
 
+    await createReviewNotification(req.userId!, result.review);
+
     res.json(result);
   })
 );
@@ -48,6 +51,7 @@ pluggyRouter.post(
   asyncHandler(async (req, res) => {
     const { pluggyItemId } = addItemSchema.parse(req.body);
     const result = await addItemById(req.userId!, pluggyItemId);
+    await createReviewNotification(req.userId!, result.review);
     res.status(201).json(result);
   })
 );

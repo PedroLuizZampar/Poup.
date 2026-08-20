@@ -337,7 +337,7 @@ export async function syncUserItem(
 export async function addItemById(
   userId: string,
   pluggyItemId: string
-): Promise<SyncItemResponse> {
+): Promise<SyncResult> {
   const existing = await prisma.item.findUnique({
     where: { pluggyItemId },
     select: { userId: true, institutionName: true },

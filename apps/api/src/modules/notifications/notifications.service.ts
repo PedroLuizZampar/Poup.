@@ -3,6 +3,7 @@ import { NotificationSeverity } from "@prisma/client";
 import type { NotificationDTO } from "@poup/shared";
 import { listBudgets } from "../budgets/budgets.service";
 import { NotificationNotFoundError } from "../../lib/errors";
+import type { ProcessResult } from "../categorization/categorization.service";
 
 export { NotificationNotFoundError };
 
@@ -12,6 +13,7 @@ function formatNotificationDTO(n: {
   body: string;
   severity: NotificationSeverity;
   read: boolean;
+  link: string | null;
   createdAt: Date;
 }): NotificationDTO {
   return {
@@ -20,8 +22,57 @@ function formatNotificationDTO(n: {
     body: n.body,
     severity: n.severity,
     read: n.read,
+    link: n.link,
     createdAt: n.createdAt.toISOString(),
   };
+}
+
+const REVIEW_LINK = "/revisao";
+
+/**
+ * Uma notificação por lote, não uma por transação — uma importação de 200
+ * lançamentos encheria o sininho e enterraria os alertas de orçamento. Se já
+ * existe uma não lida apontando para a revisão, ela é atualizada: o que o
+ * usuário quer saber é quantas estão esperando agora, não quantas chegaram em
+ * cada sync.
+ */
+export async function createReviewNotification(
+  userId: string,
+  result: ProcessResult
+): Promise<void> {
+  if (result.suggested === 0) return;
+
+  const pendentes = await prisma.categorySuggestion.count({
+    where: { userId, status: "PENDING" },
+  });
+  if (pendentes === 0) return;
+
+  const title = `${pendentes} ${pendentes === 1 ? "transação" : "transações"} para revisar`;
+  const partes = [
+    `${result.suggested} com categoria sugerida`,
+    result.withoutGuess > 0 ? `${result.withoutGuess} sem palpite` : null,
+    result.transfers > 0
+      ? `${result.transfers} identificadas como transferência entre suas contas`
+      : null,
+  ].filter(Boolean);
+  const body = `${partes.join(", ")}. Toque para revisar uma a uma.`;
+
+  const existing = await prisma.notification.findFirst({
+    where: { userId, link: REVIEW_LINK, read: false },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existing) {
+    await prisma.notification.update({
+      where: { id: existing.id },
+      data: { title, body, createdAt: new Date() },
+    });
+    return;
+  }
+
+  await prisma.notification.create({
+    data: { userId, title, body, severity: NotificationSeverity.INFO, link: REVIEW_LINK },
+  });
 }
 
 export async function listNotifications(userId: string): Promise<{
