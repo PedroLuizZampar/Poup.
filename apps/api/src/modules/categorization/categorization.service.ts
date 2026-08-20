@@ -50,6 +50,7 @@ export async function processNewTransactions(
       type: true,
       date: true,
       description: true,
+      categoryId: true,
       transferPairId: true,
       account: { select: { type: true } },
     },
@@ -115,14 +116,19 @@ export async function processNewTransactions(
     emTransferencia.add(par.bId);
   }
 
-  // 2. O resto cai na oculta do próprio tipo.
-  const restantes = novas.filter((t) => !emTransferencia.has(t.id));
+  // 2. O resto cai na oculta do próprio tipo — mas só o que ainda não tem
+  //    categoria nenhuma. O pipeline preenche vazio; ele não desfaz decisão.
+  //    Sem esse filtro, chamá-lo duas vezes sobre os mesmos ids arrancaria as
+  //    transferências recém-pareadas de volta para "Sem categoria".
+  const semDecisao = novas.filter(
+    (t) => !emTransferencia.has(t.id) && t.categoryId === null
+  );
 
   for (const key of [
     SystemCategoryKey.UNCATEGORIZED_EXPENSE,
     SystemCategoryKey.UNCATEGORIZED_INCOME,
   ] as const) {
-    const ids = restantes.filter((t) => uncategorizedKeyFor(t.type) === key).map((t) => t.id);
+    const ids = semDecisao.filter((t) => uncategorizedKeyFor(t.type) === key).map((t) => t.id);
     if (ids.length === 0) continue;
     await prisma.transaction.updateMany({
       where: { id: { in: ids }, userId },
@@ -156,7 +162,7 @@ export async function processNewTransactions(
 
   // 4. Sugestões. `skipDuplicates` cobre a transação que já foi julgada num
   //    sync anterior: uma sugestão por transação, e pular é definitivo.
-  const sugestoes = restantes
+  const sugestoes = semDecisao
     .map((tx) => {
       const palpite = suggestCategory({ description: tx.description }, ctx);
       if (!palpite) return null;
@@ -182,6 +188,6 @@ export async function processNewTransactions(
   return {
     transfers: emTransferencia.size,
     suggested,
-    withoutGuess: restantes.length - suggested,
+    withoutGuess: semDecisao.length - suggested,
   };
 }

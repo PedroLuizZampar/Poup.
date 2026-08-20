@@ -6,6 +6,7 @@ import {
   CategoryNotFoundError,
   TransactionNotFoundError,
 } from "../../lib/errors";
+import { ensureSystemCategories, uncategorizedKeyFor } from "../../lib/systemCategories";
 
 export { AccountNotFoundError, CategoryNotFoundError, TransactionNotFoundError };
 
@@ -168,6 +169,14 @@ export async function createTransaction(
     }
   }
 
+  // Nem a criação manual escapa da invariante: sem categoria escolhida, a
+  // transação nasce na oculta do próprio tipo.
+  let categoryId = input.categoryId ?? null;
+  if (!categoryId) {
+    const systemIds = await ensureSystemCategories(prisma, userId);
+    categoryId = systemIds[uncategorizedKeyFor(input.type as PrismaTransactionType)];
+  }
+
   const created = await prisma.transaction.create({
     data: {
       userId,
@@ -176,7 +185,7 @@ export async function createTransaction(
       amount: new Prisma.Decimal(input.amount),
       type: input.type as PrismaTransactionType,
       date: new Date(input.date),
-      categoryId: input.categoryId ?? null,
+      categoryId,
       note: input.note?.trim() ?? null,
       isRecurring: input.isRecurring ?? false,
     },
@@ -210,11 +219,41 @@ export async function updateTransaction(
     }
   }
 
+  // Mover uma ponta para fora de "Transferência entre contas" significa que o
+  // pareamento errou. Desfazer só o vínculo deixaria a outra ponta sozinha numa
+  // categoria que já não descreve nada — ela volta para a oculta do próprio
+  // tipo, onde o filtro "sem categoria" a encontra.
+  if (input.categoryId !== undefined && existing.transferPairId) {
+    const systemIds = await ensureSystemCategories(prisma, userId);
+    const orfas = await prisma.transaction.findMany({
+      where: { userId, transferPairId: existing.transferPairId, id: { not: id } },
+      select: { id: true, type: true },
+    });
+
+    for (const orfa of orfas) {
+      await prisma.transaction.update({
+        where: { id: orfa.id },
+        data: {
+          transferPairId: null,
+          categoryId: systemIds[uncategorizedKeyFor(orfa.type)],
+        },
+      });
+    }
+
+    await prisma.transaction.update({
+      where: { id },
+      data: { transferPairId: null },
+    });
+  }
+
   const updated = await prisma.transaction.update({
     where: { id },
     data: {
       ...(input.description !== undefined && { description: input.description.trim() }),
-      ...(input.categoryId !== undefined && { categoryId: input.categoryId }),
+      // Limpar a categoria pela edição recriaria o estado sem categoria; para
+      // "não sei ainda" existe a oculta, que o usuário alcança pela fila.
+      ...(input.categoryId !== undefined &&
+        input.categoryId !== null && { categoryId: input.categoryId }),
       ...(input.note !== undefined && { note: input.note ? input.note.trim() : null }),
       ...(input.isRecurring !== undefined && { isRecurring: input.isRecurring }),
     },

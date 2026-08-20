@@ -16,7 +16,17 @@ import {
   resolveAccountInstitution,
   resolveItemInstitution,
 } from "../../lib/institutions";
-import { findBestCategoryMatch } from "../../lib/categorization";
+import { processNewTransactions } from "../categorization/categorization.service";
+import type { ProcessResult } from "../categorization/categorization.service";
+
+/**
+ * O que o sync devolve por dentro: o DTO que vai para o cliente mais o
+ * resultado do pipeline. `review` fica fora do `SyncItemResponse` compartilhado
+ * porque só a rota usa, para montar a notificação — o app não lê.
+ */
+export interface SyncResult extends SyncItemResponse {
+  review: ProcessResult;
+}
 
 /** Um `Item` do banco só com o que o sync precisa. */
 type SyncableItem = Pick<Item, "id" | "userId" | "pluggyItemId">;
@@ -159,7 +169,7 @@ export async function getUserItem(userId: string, pluggyItemId: string): Promise
 }
 
 /** Sincroniza um item **já resolvido**, do dono já conferido. */
-export async function syncItem(item: SyncableItem): Promise<SyncItemResponse> {
+export async function syncItem(item: SyncableItem): Promise<SyncResult> {
   const { userId, pluggyItemId } = item;
   const client = await getPluggyClientForUser(userId);
 
@@ -210,14 +220,9 @@ export async function syncItem(item: SyncableItem): Promise<SyncItemResponse> {
     },
   });
 
-  // 4. Categorias do usuário, para a auto-categorização
-  const userCategories = await prisma.category.findMany({
-    where: { userId },
-    select: { id: true, name: true },
-  });
-
   let accountsSynced = 0;
   let transactionsSynced = 0;
+  const idsNovos: string[] = [];
 
   for (const pAccount of accountsResponse.results) {
     const accountInstitution = resolveAccountInstitution(pAccount, institutionName);
@@ -254,13 +259,26 @@ export async function syncItem(item: SyncableItem): Promise<SyncItemResponse> {
         return [] as PluggyTransaction[];
       });
 
+    // O upsert não diz se criou ou atualizou, e o pipeline só deve rodar sobre
+    // o que é novo — reprocessar o que já foi revisado ressuscitaria sugestões
+    // que o usuário já julgou.
+    const idsRemotos = transactions.map((t) => t.id);
+    const jaExistentes = new Set(
+      (
+        await prisma.transaction.findMany({
+          where: { pluggyTransactionId: { in: idsRemotos } },
+          select: { pluggyTransactionId: true },
+        })
+      ).map((t) => t.pluggyTransactionId!)
+    );
+
     for (const pTx of transactions) {
       const rawAmount = pTx.amount ?? 0;
       const isExpense = pTx.type === "DEBIT" || rawAmount < 0;
       const description = (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim();
 
       // Deduplicação por pluggyTransactionId
-      await prisma.transaction.upsert({
+      const saved = await prisma.transaction.upsert({
         where: { pluggyTransactionId: pTx.id },
         update: {
           description,
@@ -277,19 +295,26 @@ export async function syncItem(item: SyncableItem): Promise<SyncItemResponse> {
           amount: new Prisma.Decimal(Math.abs(rawAmount)),
           type: isExpense ? TransactionType.EXPENSE : TransactionType.INCOME,
           date: new Date(pTx.date),
-          categoryId: findBestCategoryMatch(description, pTx.category, userCategories),
           isRecurring: false,
         },
+        select: { id: true },
       });
+
+      if (!jaExistentes.has(pTx.id)) {
+        idsNovos.push(saved.id);
+      }
 
       transactionsSynced++;
     }
   }
 
+  const review = await processNewTransactions(userId, idsNovos);
+
   return {
     item: toItemDTO(itemRecord),
     accountsSynced,
     transactionsSynced,
+    review,
   };
 }
 
@@ -297,7 +322,7 @@ export async function syncItem(item: SyncableItem): Promise<SyncItemResponse> {
 export async function syncUserItem(
   userId: string,
   pluggyItemId: string
-): Promise<SyncItemResponse> {
+): Promise<SyncResult> {
   return syncItem(await getUserItem(userId, pluggyItemId));
 }
 
@@ -353,6 +378,7 @@ export async function syncAllItems(userId: string): Promise<{
   itemsSynced: number;
   accountsSynced: number;
   transactionsSynced: number;
+  review: ProcessResult;
 }> {
   const items = await prisma.item.findMany({ where: { userId } });
 
@@ -365,12 +391,16 @@ export async function syncAllItems(userId: string): Promise<{
   let totalAccounts = 0;
   let totalTransactions = 0;
   let itemsCount = 0;
+  const totalReview: ProcessResult = { transfers: 0, suggested: 0, withoutGuess: 0 };
 
   for (const item of items) {
     try {
       const res = await syncItem(item);
       totalAccounts += res.accountsSynced;
       totalTransactions += res.transactionsSynced;
+      totalReview.transfers += res.review.transfers;
+      totalReview.suggested += res.review.suggested;
+      totalReview.withoutGuess += res.review.withoutGuess;
       itemsCount++;
     } catch (err: any) {
       console.error(`Erro ao sincronizar item ${item.pluggyItemId}:`, err?.message || err);
@@ -381,5 +411,6 @@ export async function syncAllItems(userId: string): Promise<{
     itemsSynced: itemsCount,
     accountsSynced: totalAccounts,
     transactionsSynced: totalTransactions,
+    review: totalReview,
   };
 }
