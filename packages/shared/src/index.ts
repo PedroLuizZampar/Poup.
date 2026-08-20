@@ -2,11 +2,18 @@ export type TransactionType = "INCOME" | "EXPENSE";
 
 export type BudgetStatus = "ok" | "warning" | "exceeded";
 
+export type SystemCategoryKey =
+  | "TRANSFER"
+  | "UNCATEGORIZED_EXPENSE"
+  | "UNCATEGORIZED_INCOME";
+
 export interface CategoryDTO {
   id: string;
   name: string;
   icon: string;
   colorKey: string;
+  /** Preenchido nas categorias que o Poup mantém. Não aparecem em seletores. */
+  systemKey: SystemCategoryKey | null;
 }
 
 export interface AccountDTO {
@@ -291,4 +298,29 @@ export interface ReportSummaryDTO {
   byCategory: ReportCategoryTotalDTO[];
   /** Serie mensal do periodo, em ordem cronologica. */
   monthly: ReportMonthTotalDTO[];
+}
+
+// ==========================================
+// SUGESTOES DE CATEGORIA
+// ==========================================
+
+export interface SuggestionDTO {
+  id: string;
+  transaction: TransactionDTO;
+  suggestedCategoryId: string;
+  suggestedCategoryName: string;
+  source: "HISTORY" | "RULE" | "PLUGGY";
+  confidence: number;
+}
+
+export interface SimilarTransactionDTO extends TransactionDTO {
+  /** 0..1. Quanto a descrição se parece com a da transação de origem. */
+  score: number;
+  /** Só na seção de categoria divergente. */
+  currentCategoryName?: string | null;
+}
+
+export interface SimilarTransactionsResponse {
+  uncategorized: SimilarTransactionDTO[];
+  differentCategory: SimilarTransactionDTO[];
 }

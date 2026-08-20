@@ -12,6 +12,7 @@ import { goalsRouter } from "./modules/goals/goals.routes";
 import { notificationsRouter } from "./modules/notifications/notifications.routes";
 import { accountsRouter } from "./modules/accounts/accounts.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
+import { suggestionsRouter } from "./modules/categorization/suggestions.routes";
 import { errorHandler } from "./middleware/errorHandler";
 import { ForbiddenError } from "./lib/errors";
 
@@ -98,6 +99,7 @@ apiRouter.use("/pluggy", pluggyRouter);
 apiRouter.use("/budgets", budgetsRouter);
 apiRouter.use("/goals", goalsRouter);
 apiRouter.use("/notifications", notificationsRouter);
+apiRouter.use("/suggestions", suggestionsRouter);
 
 app.use("/api", apiRouter);
 
