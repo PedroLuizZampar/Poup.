@@ -25,7 +25,8 @@ import type {
   ChangePasswordRequest,
   PluggyCredentialsDTO,
   RegisterInput,
-  SuggestionDTO,
+  ApplySuggestionsPayload,
+  SuggestionsResponse,
   SimilarTransactionsResponse,
 } from "@poup/shared";
 
@@ -412,10 +413,7 @@ export async function updateItemImage(id: string, imageUrl: string | null): Prom
 // ==========================================
 // SUGESTÕES DE CATEGORIA
 // ==========================================
-export async function fetchSuggestions(): Promise<{
-  suggestions: SuggestionDTO[];
-  count: number;
-}> {
+export async function fetchSuggestions(): Promise<SuggestionsResponse> {
   return request("/suggestions");
 }
 
@@ -424,18 +422,27 @@ export async function fetchSuggestionsCount(): Promise<number> {
   return data.count;
 }
 
-export async function acceptSuggestion(
-  id: string,
-  categoryId?: string
-): Promise<{ transaction: TransactionDTO; remaining: number }> {
-  return request(`/suggestions/${id}/accept`, {
+/**
+ * Confirma uma página da revisão. As duas respostas já vêm com a fila
+ * recarregada — o servidor reavalia as pendentes depois de aplicar o lote, e a
+ * lista que a tela tinha na mão envelhece nesse instante.
+ */
+export async function applySuggestions(
+  payload: ApplySuggestionsPayload
+): Promise<SuggestionsResponse & { applied: number }> {
+  return request("/suggestions/apply", {
     method: "POST",
-    body: JSON.stringify(categoryId ? { categoryId } : {}),
+    body: JSON.stringify(payload),
   });
 }
 
-export async function dismissSuggestion(id: string): Promise<{ remaining: number }> {
-  return request(`/suggestions/${id}/dismiss`, { method: "POST" });
+export async function dismissSuggestions(
+  ids: string[]
+): Promise<SuggestionsResponse & { dismissed: number }> {
+  return request("/suggestions/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
 }
 
 export async function fetchSimilarTransactions(

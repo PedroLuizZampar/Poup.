@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { SimilarTransactionDTO } from "@poup/shared";
 import { bulkCategorize, fetchSimilarTransactions } from "../../lib/api";
 import type { CategoryMap } from "../../hooks/useCategories";
+import { notifySuggestionsChanged } from "../../hooks/useSuggestionsCount";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { formatCurrency, formatDate } from "../../lib/format";
@@ -41,11 +42,11 @@ function Linha({
         </span>
       </span>
       <span
-        className={`text-sm font-semibold shrink-0 ${
-          tx.type === "EXPENSE" ? "text-danger" : "text-success"
+        className={`font-display font-bold text-sm shrink-0 tnum ${
+          tx.type === "INCOME" ? "text-income" : "text-expense"
         }`}
       >
-        {tx.type === "EXPENSE" ? "-" : "+"}
+        {tx.type === "INCOME" ? "+ " : "- "}
         {formatCurrency(tx.amount)}
       </span>
     </label>
@@ -102,6 +103,8 @@ export function SimilarTransactionsModal({
     setSaving(true);
     try {
       const { updated } = await bulkCategorize(Array.from(selecionadas), categoryId);
+      // Aplicar em massa resolve as sugestões pendentes das transações afetadas.
+      notifySuggestionsChanged();
       onApplied?.(updated);
       onClose();
     } catch (err) {

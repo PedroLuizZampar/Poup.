@@ -35,27 +35,38 @@ const REVIEW_LINK = "/revisao";
  * existe uma não lida apontando para a revisão, ela é atualizada: o que o
  * usuário quer saber é quantas estão esperando agora, não quantas chegaram em
  * cada sync.
+ *
+ * O título conta as **pendentes**, não as do lote: quem abre o sininho depois de
+ * três syncs quer saber o tamanho do trabalho que sobrou, e a notificação é o
+ * único lugar onde esse número aparece antes de a tela abrir. O corpo é que
+ * conta o lote — quantas o app adivinhou e quantas ficaram sem palpite.
  */
 export async function createReviewNotification(
   userId: string,
   result: ProcessResult
 ): Promise<void> {
-  if (result.suggested === 0) return;
+  // O sync pode não ter trazido nada novo, ou ter trazido só transferências
+  // internas — que já nascem categorizadas e não vão para a fila.
+  if (result.suggested + result.withoutGuess === 0) return;
 
   const pendentes = await prisma.categorySuggestion.count({
     where: { userId, status: "PENDING" },
   });
   if (pendentes === 0) return;
 
-  const title = `${pendentes} ${pendentes === 1 ? "transação" : "transações"} para revisar`;
+  const title = `${pendentes} ${pendentes === 1 ? "transação" : "transações"} sem categoria`;
+  const chegaram = result.suggested + result.withoutGuess;
   const partes = [
-    `${result.suggested} com categoria sugerida`,
+    `${chegaram} ${chegaram === 1 ? "nova" : "novas"} neste sync`,
+    result.suggested > 0
+      ? `${result.suggested} com categoria sugerida`
+      : null,
     result.withoutGuess > 0 ? `${result.withoutGuess} sem palpite` : null,
     result.transfers > 0
       ? `${result.transfers} identificadas como transferência entre suas contas`
       : null,
   ].filter(Boolean);
-  const body = `${partes.join(", ")}. Toque para revisar uma a uma.`;
+  const body = `${partes.join(", ")}. Toque para categorizar uma a uma.`;
 
   const existing = await prisma.notification.findFirst({
     where: { userId, link: REVIEW_LINK, read: false },

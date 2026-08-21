@@ -11,10 +11,20 @@ import { CategoryChip } from "../components/ui/CategoryChip";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { Field } from "../components/ui/Field";
+import { CurrencyInput } from "../components/ui/CurrencyInput";
+import { InstitutionLogo } from "../components/ui/InstitutionLogo";
 import { TransactionDetailModal } from "../components/transactions/TransactionDetailModal";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useCategoryMap } from "../hooks/useCategories";
+import { displayCategory } from "../lib/categories";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
+
+/** "2026-08-20" -> "20/08/2026". Sem passar por Date: o input entrega o dia
+ *  já no fuso do usuário, e reinterpretá-lo em UTC o atrasaria em um. */
+function formatDay(day: string): string {
+  const [year, month, dayOfMonth] = day.split("-");
+  return `${dayOfMonth}/${month}/${year}`;
+}
 
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,8 +43,16 @@ export function TransactionsPage() {
     isUncategorizedParam ? "UNCATEGORIZED" : "ALL"
   );
   const [accountFilter, setAccountFilter] = useState<string>("ALL");
+  /** Intervalo de datas, "YYYY-MM-DD". String vazia = sem limite. */
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  /** Faixa de valor, em reais. Zero = sem limite (é o vazio do CurrencyInput). */
+  const [minAmount, setMinAmount] = useState(0);
+  const [maxAmount, setMaxAmount] = useState(0);
+  const [debouncedMinAmount, setDebouncedMinAmount] = useState(0);
+  const [debouncedMaxAmount, setDebouncedMaxAmount] = useState(0);
   const [selectedTx, setSelectedTx] = useState<TransactionDTO | null>(null);
-  /** No mobile os três selects moram numa folha só, atrás de um botão. */
+  /** No mobile os filtros moram numa folha só, atrás de um botão. */
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
   // Debounce da busca (300ms)
@@ -44,6 +62,21 @@ export function TransactionsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // A faixa de valor é digitada dígito a dígito: sem esperar, "1500" dispararia
+  // quatro buscas — a última delas a única que o usuário quis.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMinAmount(minAmount);
+      setDebouncedMaxAmount(maxAmount);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [minAmount, maxAmount]);
+
+  /** Faixas invertidas não viram busca: não há resultado possível. */
+  const dateRangeInvalid = Boolean(startDate && endDate && startDate > endDate);
+  const amountRangeInvalid =
+    debouncedMinAmount > 0 && debouncedMaxAmount > 0 && debouncedMinAmount > debouncedMaxAmount;
 
   async function loadData() {
     try {
@@ -59,6 +92,12 @@ export function TransactionsPage() {
           categoryId: actualCatId,
           uncategorized: isUncat || undefined,
           accountId: accountFilter === "ALL" ? undefined : accountFilter,
+          startDate: dateRangeInvalid ? undefined : startDate || undefined,
+          endDate: dateRangeInvalid ? undefined : endDate || undefined,
+          minAmount:
+            amountRangeInvalid || debouncedMinAmount <= 0 ? undefined : debouncedMinAmount,
+          maxAmount:
+            amountRangeInvalid || debouncedMaxAmount <= 0 ? undefined : debouncedMaxAmount,
         }),
         fetchCategories(),
         fetchAccounts(),
@@ -76,7 +115,16 @@ export function TransactionsPage() {
 
   useEffect(() => {
     loadData();
-  }, [debouncedSearch, typeFilter, categoryFilter, accountFilter]);
+  }, [
+    debouncedSearch,
+    typeFilter,
+    categoryFilter,
+    accountFilter,
+    startDate,
+    endDate,
+    debouncedMinAmount,
+    debouncedMaxAmount,
+  ]);
 
   const categoryMap = useCategoryMap(categories);
   // O mapa precisa de todas para desenhar o chip "Transferência entre contas";
@@ -109,25 +157,55 @@ export function TransactionsPage() {
     return [...base, ...items];
   }, [accounts]);
 
+  const accountById = useMemo(() => {
+    const map: Record<string, AccountDTO> = {};
+    for (const account of accounts) map[account.id] = account;
+    return map;
+  }, [accounts]);
+
+  const hasDateFilter = Boolean(startDate || endDate);
+  const hasAmountFilter = minAmount > 0 || maxAmount > 0;
+
   // Checagem de filtros ativos
   const hasActiveFilters =
     debouncedSearch !== "" ||
     typeFilter !== "ALL" ||
     categoryFilter !== "ALL" ||
-    accountFilter !== "ALL";
+    accountFilter !== "ALL" ||
+    hasDateFilter ||
+    hasAmountFilter;
 
-  /** Só os três selects — a busca tem afordância própria e não entra na conta. */
-  const sheetFilterCount = [typeFilter, categoryFilter, accountFilter].filter(
-    (f) => f !== "ALL"
-  ).length;
+  /** Tudo menos a busca, que tem afordância própria e não entra na conta. */
+  const sheetFilterCount =
+    [typeFilter, categoryFilter, accountFilter].filter((f) => f !== "ALL").length +
+    (hasDateFilter ? 1 : 0) +
+    (hasAmountFilter ? 1 : 0);
+
+  function clearSelectFilters() {
+    setTypeFilter("ALL");
+    setCategoryFilter("ALL");
+    setAccountFilter("ALL");
+    clearDateFilter();
+    clearAmountFilter();
+    setSearchParams({});
+  }
+
+  function clearDateFilter() {
+    setStartDate("");
+    setEndDate("");
+  }
+
+  function clearAmountFilter() {
+    setMinAmount(0);
+    setMaxAmount(0);
+    setDebouncedMinAmount(0);
+    setDebouncedMaxAmount(0);
+  }
 
   function handleClearFilters() {
     setSearch("");
     setDebouncedSearch("");
-    setTypeFilter("ALL");
-    setCategoryFilter("ALL");
-    setAccountFilter("ALL");
-    setSearchParams({});
+    clearSelectFilters();
   }
 
   function handleRowKeyDown(e: KeyboardEvent<HTMLTableRowElement>, tx: TransactionDTO) {
@@ -137,6 +215,8 @@ export function TransactionsPage() {
     }
   }
 
+  /* A logo aparece só aqui: numa lista de "Conta Corrente", "Conta Corrente" e
+     "Poupança", o nome sozinho não diz de que banco é cada uma. */
   const accountSelect = (
     <Select
       size="md"
@@ -144,6 +224,21 @@ export function TransactionsPage() {
       onChange={setAccountFilter}
       options={accountOptions}
       aria-label="Conta"
+      renderOption={(opt) => {
+        const account = accountById[opt.value];
+        if (!account) return <span className="truncate">{opt.label}</span>;
+        return (
+          <span className="flex items-center gap-2 min-w-0">
+            <InstitutionLogo
+              size="xs"
+              name={account.institutionName}
+              imageUrl={account.institutionImageUrl}
+              customImageUrl={account.customImageUrl}
+            />
+            <span className="truncate">{opt.label}</span>
+          </span>
+        );
+      }}
     />
   );
 
@@ -181,6 +276,54 @@ export function TransactionsPage() {
         );
       }}
     />
+  );
+
+  const dateRangeFields = (
+    <div className="flex items-center gap-2">
+      <input
+        type="date"
+        aria-label="Data inicial"
+        value={startDate}
+        max={endDate || undefined}
+        onChange={(e) => setStartDate(e.target.value)}
+        className={`w-full h-ctl px-3 rounded-ctl bg-surface-alt text-xs text-text-primary border focus-ring transition-colors tnum ${
+          dateRangeInvalid
+            ? "border-error"
+            : "border-border hover:border-border-strong"
+        }`}
+      />
+      <span className="text-xs text-text-secondary shrink-0">até</span>
+      <input
+        type="date"
+        aria-label="Data final"
+        value={endDate}
+        min={startDate || undefined}
+        onChange={(e) => setEndDate(e.target.value)}
+        className={`w-full h-ctl px-3 rounded-ctl bg-surface-alt text-xs text-text-primary border focus-ring transition-colors tnum ${
+          dateRangeInvalid
+            ? "border-error"
+            : "border-border hover:border-border-strong"
+        }`}
+      />
+    </div>
+  );
+
+  const amountRangeFields = (
+    <div className="flex items-center gap-2">
+      <CurrencyInput
+        value={minAmount}
+        onChange={setMinAmount}
+        placeholder="Mínimo"
+        hasError={amountRangeInvalid}
+      />
+      <span className="text-xs text-text-secondary shrink-0">até</span>
+      <CurrencyInput
+        value={maxAmount}
+        onChange={setMaxAmount}
+        placeholder="Máximo"
+        hasError={amountRangeInvalid}
+      />
+    </div>
   );
 
   return (
@@ -248,6 +391,24 @@ export function TransactionsPage() {
               </span>
             )}
           </Button>
+        </div>
+
+        {/* Período e valor — segunda linha no desktop, folha no mobile. */}
+        <div className="hidden md:flex items-end gap-4 flex-wrap">
+          <Field
+            label="Período"
+            className="w-[320px]"
+            error={dateRangeInvalid ? "A data inicial vem depois da final." : undefined}
+          >
+            {dateRangeFields}
+          </Field>
+          <Field
+            label="Faixa de valor"
+            className="w-[320px]"
+            error={amountRangeInvalid ? "O valor mínimo é maior que o máximo." : undefined}
+          >
+            {amountRangeFields}
+          </Field>
         </div>
 
         {/* Chips de Filtros Ativos */}
@@ -323,6 +484,46 @@ export function TransactionsPage() {
               </span>
             )}
 
+            {hasDateFilter && (
+              <span className="px-2 py-0.5 rounded-chip bg-surface-alt border border-border text-text-primary flex items-center gap-1 max-w-full">
+                <span className="truncate tnum">
+                  {startDate && endDate
+                    ? `Período: ${formatDay(startDate)} – ${formatDay(endDate)}`
+                    : startDate
+                      ? `A partir de ${formatDay(startDate)}`
+                      : `Até ${formatDay(endDate)}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearDateFilter}
+                  aria-label="Remover filtro de período"
+                  className="tap-target hover:text-error ml-1 shrink-0"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {hasAmountFilter && (
+              <span className="px-2 py-0.5 rounded-chip bg-surface-alt border border-border text-text-primary flex items-center gap-1 max-w-full">
+                <span className="truncate tnum">
+                  {minAmount > 0 && maxAmount > 0
+                    ? `Valor: ${formatCurrency(minAmount)} – ${formatCurrency(maxAmount)}`
+                    : minAmount > 0
+                      ? `Valor a partir de ${formatCurrency(minAmount)}`
+                      : `Valor até ${formatCurrency(maxAmount)}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearAmountFilter}
+                  aria-label="Remover filtro de valor"
+                  className="tap-target hover:text-error ml-1 shrink-0"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
             <Button
               variant="ghost"
               size="sm"
@@ -366,7 +567,7 @@ export function TransactionsPage() {
                 no toque. Aqui a linha inteira é um único alvo. */}
             <ul className="md:hidden divide-y divide-border">
               {transactions.map((tx) => {
-                const cat = tx.categoryId ? categoryMap[tx.categoryId] : null;
+                const cat = displayCategory(tx.categoryId ? categoryMap[tx.categoryId] : null);
                 return (
                   <li key={tx.id}>
                     <button
@@ -434,16 +635,22 @@ export function TransactionsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-border text-overline font-semibold text-text-secondary uppercase tracking-wider bg-surface-alt/40">
-                    <th className="py-3 px-6">Descrição</th>
-                    <th className="py-3 px-6">Categoria</th>
-                    <th className="py-3 px-6">Data</th>
-                    <th className="py-3 px-6">Conta</th>
-                    <th className="py-3 px-6 text-right">Valor</th>
+                    {/* `w-full` na descrição + `w-px whitespace-nowrap` nas
+                        demais: quem cede espaço quando a tabela aperta é o
+                        texto da descrição, que trunca, e não o valor, que
+                        quebrava em duas linhas ("+" numa, o número na outra). */}
+                    <th className="py-3 px-6 w-full">Descrição</th>
+                    <th className="py-3 px-6 w-px whitespace-nowrap">Categoria</th>
+                    <th className="py-3 px-6 w-px whitespace-nowrap">Data</th>
+                    <th className="py-3 px-6 w-px whitespace-nowrap">Conta</th>
+                    <th className="py-3 px-6 w-px whitespace-nowrap text-right">Valor</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border text-body-sm">
                   {transactions.map((tx) => {
-                    const cat = tx.categoryId ? categoryMap[tx.categoryId] : null;
+                    const cat = displayCategory(
+                      tx.categoryId ? categoryMap[tx.categoryId] : null
+                    );
                     return (
                       <tr
                         key={tx.id}
@@ -452,7 +659,7 @@ export function TransactionsPage() {
                         onKeyDown={(e) => handleRowKeyDown(e, tx)}
                         className="hover:bg-surface-alt/60 transition-colors cursor-pointer focus-ring"
                       >
-                        <td className="py-3.5 px-6">
+                        <td className="py-3.5 px-6 max-w-0">
                           <div className="flex items-center gap-3">
                             <CategoryTile
                               icon={cat?.icon}
@@ -472,7 +679,7 @@ export function TransactionsPage() {
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-6">
+                        <td className="py-3.5 px-6 whitespace-nowrap">
                           {cat ? (
                             <CategoryChip
                               name={cat.name}
@@ -486,16 +693,18 @@ export function TransactionsPage() {
                           )}
                         </td>
 
-                        <td className="py-3.5 px-6 text-text-secondary text-caption tnum">
+                        <td className="py-3.5 px-6 text-text-secondary text-caption whitespace-nowrap tnum">
                           {formatDate(tx.date)}
                         </td>
 
-                        <td className="py-3.5 px-6 text-text-secondary text-caption truncate max-w-[140px]">
-                          {tx.accountName || "Principal"}
+                        <td className="py-3.5 px-6 text-text-secondary text-caption max-w-[140px]">
+                          <span className="block truncate">
+                            {tx.accountName || "Principal"}
+                          </span>
                         </td>
 
                         <td
-                          className={`py-3.5 px-6 text-right font-display font-bold text-xs md:text-sm tnum ${
+                          className={`py-3.5 px-6 text-right font-display font-bold text-xs md:text-sm whitespace-nowrap tnum ${
                             tx.type === "INCOME" ? "text-income" : "text-expense"
                           }`}
                         >
@@ -524,12 +733,7 @@ export function TransactionsPage() {
             <Button
               variant="ghost"
               size="md"
-              onClick={() => {
-                setTypeFilter("ALL");
-                setCategoryFilter("ALL");
-                setAccountFilter("ALL");
-                setSearchParams({});
-              }}
+              onClick={clearSelectFilters}
               disabled={sheetFilterCount === 0}
             >
               Limpar
@@ -540,9 +744,23 @@ export function TransactionsPage() {
           </>
         }
       >
-        <Field label="Conta">{accountSelect}</Field>
-        <Field label="Tipo">{typeSelect}</Field>
-        <Field label="Categoria">{categorySelect}</Field>
+        <div className="flex flex-col gap-4">
+          <Field label="Conta">{accountSelect}</Field>
+          <Field label="Tipo">{typeSelect}</Field>
+          <Field label="Categoria">{categorySelect}</Field>
+          <Field
+            label="Período"
+            error={dateRangeInvalid ? "A data inicial vem depois da final." : undefined}
+          >
+            {dateRangeFields}
+          </Field>
+          <Field
+            label="Faixa de valor"
+            error={amountRangeInvalid ? "O valor mínimo é maior que o máximo." : undefined}
+          >
+            {amountRangeFields}
+          </Field>
+        </div>
       </Modal>
 
       {/* Modal Detalhe de Transação */}

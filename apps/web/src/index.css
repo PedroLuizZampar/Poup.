@@ -346,9 +346,17 @@
 
 /* Botão de ícone pequeno que precisa de alvo grande sem ser redesenhado: o
    `::after` estende a área clicável para fora, o desenho continua do tamanho
-   que era. Só vale no toque — no mouse, 28px já é um alvo confortável. */
-.tap-target {
-  position: relative;
+   que era. Só vale no toque — no mouse, 28px já é um alvo confortável.
+
+   O `position: relative` mora em `components` de propósito: em `utilities` ele
+   empatava com `absolute` do próprio Tailwind e vencia pela ordem do arquivo —
+   um `tap-target absolute` (o ✕ de limpar busca) saía do lugar e caía embaixo
+   do campo. Na camada de baixo, qualquer utilitário de posição tem precedência
+   e o `::after` continua ancorado no elemento. */
+@layer components {
+  .tap-target {
+    position: relative;
+  }
 }
 
 @media (pointer: coarse) {

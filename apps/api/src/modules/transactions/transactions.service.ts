@@ -23,6 +23,9 @@ export interface TransactionFilters {
   uncategorized?: boolean;
   type?: TransactionType;
   search?: string;
+  /** Piso e teto do valor da transação, em reais. */
+  minAmount?: number;
+  maxAmount?: number;
   /** Teto de resultados, para quem só mostra as últimas (o painel usa 5). */
   limit?: number;
 }
@@ -73,6 +76,13 @@ function formatTransactionDTO(tx: {
   };
 }
 
+/** Início do dia seguinte a "YYYY-MM-DD", em UTC — o limite superior aberto. */
+function nextDayUtc(day: string): Date {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
 export async function listTransactions(
   userId: string,
   filters: TransactionFilters = {}
@@ -94,9 +104,12 @@ export async function listTransactions(
       };
     }
   } else if (filters.startDate || filters.endDate) {
+    // `endDate` chega como dia ("YYYY-MM-DD"), que vira meia-noite em UTC: com
+    // `lte` uma transação registrada às 10h do próprio dia final ficaria de
+    // fora. O corte é no início do dia seguinte.
     where.date = {
-      ...(filters.startDate && { gte: new Date(filters.startDate) }),
-      ...(filters.endDate && { lte: new Date(filters.endDate) }),
+      ...(filters.startDate && { gte: new Date(`${filters.startDate}T00:00:00.000Z`) }),
+      ...(filters.endDate && { lt: nextDayUtc(filters.endDate) }),
     };
   }
 
@@ -119,6 +132,19 @@ export async function listTransactions(
 
   if (filters.type) {
     where.type = filters.type as PrismaTransactionType;
+  }
+
+  // `amount` é sempre positivo — o sinal mora em `type`. Faixa de valor é,
+  // portanto, comparação direta, e vale igual para despesa e receita.
+  if (filters.minAmount !== undefined || filters.maxAmount !== undefined) {
+    where.amount = {
+      ...(filters.minAmount !== undefined && {
+        gte: new Prisma.Decimal(filters.minAmount),
+      }),
+      ...(filters.maxAmount !== undefined && {
+        lte: new Prisma.Decimal(filters.maxAmount),
+      }),
+    };
   }
 
   if (filters.search) {
@@ -257,14 +283,21 @@ export async function updateTransaction(
     });
   }
 
+  // "Sem categoria" é uma escolha legítima na edição — o que ela não pode virar
+  // é `null`, que quebraria a invariante de `categoryId` sempre preenchido. O
+  // pedido vira a oculta do tipo da transação, exatamente onde o filtro "sem
+  // categoria" e a fila de revisão a encontram.
+  let nextCategoryId = input.categoryId;
+  if (input.categoryId === null) {
+    const systemIds = await ensureSystemCategories(prisma, userId);
+    nextCategoryId = systemIds[uncategorizedKeyFor(existing.type)];
+  }
+
   const updated = await prisma.transaction.update({
     where: { id },
     data: {
       ...(input.description !== undefined && { description: input.description.trim() }),
-      // Limpar a categoria pela edição recriaria o estado sem categoria; para
-      // "não sei ainda" existe a oculta, que o usuário alcança pela fila.
-      ...(input.categoryId !== undefined &&
-        input.categoryId !== null && { categoryId: input.categoryId }),
+      ...(nextCategoryId !== undefined && { categoryId: nextCategoryId }),
       ...(input.note !== undefined && { note: input.note ? input.note.trim() : null }),
       ...(input.isRecurring !== undefined && { isRecurring: input.isRecurring }),
     },

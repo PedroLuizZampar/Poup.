@@ -15,7 +15,7 @@ export function SuggestionsButton() {
     <Link
       to="/revisao"
       className="tap-target inline-flex items-center gap-2 h-ctl px-3 rounded-ctl bg-surface border border-border hover:border-border-strong hover:bg-surface-alt transition-colors focus-ring shrink-0"
-      title="Revisar categorias sugeridas"
+      title="Revisar transações sem categoria"
     >
       <span className="text-sm font-semibold text-text-primary">Sugestões</span>
       <span className="min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">

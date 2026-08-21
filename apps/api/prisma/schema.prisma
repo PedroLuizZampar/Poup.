@@ -43,6 +43,9 @@ enum SuggestionSource {
   HISTORY
   RULE
   PLUGGY
+  /// Nenhuma fonte deu palpite. A linha existe assim mesmo: a fila de revisao
+  /// e "toda transacao sem categoria", nao "toda transacao que o app adivinhou".
+  NONE
 }
 
 enum SuggestionStatus {
@@ -228,12 +231,21 @@ model CategorySuggestion {
   id                 String           @id @default(uuid())
   userId             String
   transactionId      String           @unique
-  categoryId         String
+  /// Null quando nenhuma fonte deu palpite (`source = NONE`), e tambem quando a
+  /// categoria sugerida foi excluida depois: nos dois casos a transacao continua
+  /// na fila, so que pedindo uma escolha em vez de oferecer uma.
+  categoryId         String?
   source             SuggestionSource
   /// 0..1. Em HISTORY é a fração do histórico daquele comerciante que caiu
-  /// nesta categoria; em RULE e PLUGGY é um valor fixo.
+  /// nesta categoria; em RULE e PLUGGY é um valor fixo. Em NONE, zero.
   confidence         Float
   status             SuggestionStatus @default(PENDING)
+  /// Ligada quando o usuário desmarcou a transação na página daquela categoria:
+  /// o palpite foi recusado à mão. A sugestão continua PENDING (a transação
+  /// continua sem categoria), mas sem palpite — e a reavaliação que roda a cada
+  /// lote aprovado tem de pular estas, ou devolveria na rodada seguinte
+  /// exatamente o palpite que acabou de ser recusado.
+  guessRejected      Boolean          @default(false)
   /// A categoria que o usuário de fato escolheu, quando trocou a sugerida.
   resolvedCategoryId String?
   resolvedAt         DateTime?
@@ -241,7 +253,7 @@ model CategorySuggestion {
 
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  category    Category    @relation("SuggestedCategory", fields: [categoryId], references: [id], onDelete: Cascade)
+  category    Category?   @relation("SuggestedCategory", fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
 }

@@ -42,7 +42,7 @@ const LABEL_CLASSES = "text-caption leading-none w-full text-center truncate";
 function ActiveIndicator() {
   return (
     <span
-      className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full anim-scale-in"
+      className="absolute top-0 -translate-x-1/2 w-10 h-0.5 bg-primary rounded-full anim-scale-in"
       aria-hidden="true"
     />
   );

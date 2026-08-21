@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, SuggestionSource, SystemCategoryKey } from "@prisma/client";
+import { Prisma, SuggestionSource, SuggestionStatus, SystemCategoryKey } from "@prisma/client";
 import { prisma } from "../../prisma";
 import {
   buildHistoryIndex,
   detectTransferPairs,
   suggestCategory,
   TRANSFER_WINDOW_DAYS,
+  type SuggestionContext,
   type TransferCandidate,
 } from "../../lib/categorization";
 import { ensureSystemCategories, uncategorizedKeyFor } from "../../lib/systemCategories";
@@ -15,9 +16,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export interface ProcessResult {
   /** Transações que entraram em "Transferência entre contas" (as duas pontas). */
   transfers: number;
-  /** Transações que ganharam sugestão pendente. */
+  /** Transações que entraram na fila **com** uma categoria sugerida. */
   suggested: number;
-  /** Transações que ficaram na oculta sem palpite nenhum. */
+  /** Transações que entraram na fila sem palpite nenhum (`source: NONE`). */
   withoutGuess: number;
 }
 
@@ -116,6 +117,23 @@ export async function processNewTransactions(
     emTransferencia.add(par.bId);
   }
 
+  // A outra ponta pode ter entrado num sync anterior — e o sync roda este
+  // pipeline uma vez por conexão, então "anterior" inclui a conexão de cima do
+  // mesmo sync. Nesse caso ela já tinha ganhado uma sugestão pendente, que
+  // agora não vale mais: a transação está categorizada como transferência, e a
+  // fila ficaria pedindo categoria para algo que já tem uma. Apagar (em vez de
+  // marcar DISMISSED) mantém a regra de que pendente é sinônimo de sem
+  // categoria, e deixa a sugestão voltar se o par for desfeito.
+  if (emTransferencia.size > 0) {
+    await prisma.categorySuggestion.deleteMany({
+      where: {
+        userId,
+        transactionId: { in: Array.from(emTransferencia) },
+        status: "PENDING",
+      },
+    });
+  }
+
   // 2. O resto cai na oculta do próprio tipo — mas só o que ainda não tem
   //    categoria nenhuma. O pipeline preenche vazio; ele não desfaz decisão.
   //    Sem esse filtro, chamá-lo duas vezes sobre os mesmos ids arrancaria as
@@ -137,6 +155,66 @@ export async function processNewTransactions(
   }
 
   // 3. Índice de histórico, construído uma vez para o lote inteiro.
+  const ctx = await buildSuggestionContext(userId, systemIdSet, novas.map((t) => t.id));
+
+  // 4. Sugestões — uma por transação sem categoria, **inclusive as sem palpite**.
+  //
+  //    A linha sem palpite (`source: NONE`, `categoryId: null`) parece
+  //    desperdício até você olhar de onde a fila de revisão tira o que mostrar:
+  //    ela lê esta tabela. Sem a linha, a transação que nenhuma fonte adivinhou
+  //    sumia do contador, da notificação e de `/revisao` — justo a que mais
+  //    precisa de alguém decidindo. E é a maioria em conta nova, onde não há
+  //    histórico e só a tabela de palavras-chave responde.
+  //
+  //    `skipDuplicates` cobre a transação que já foi julgada num sync anterior:
+  //    uma sugestão por transação, e pular é definitivo.
+  const palpites = semDecisao.map((tx) => ({
+    tx,
+    palpite: suggestCategory({ description: tx.description }, ctx),
+  }));
+
+  const sugestoes = palpites.map(({ tx, palpite }) => ({
+    userId,
+    transactionId: tx.id,
+    categoryId: palpite?.categoryId ?? null,
+    source: (palpite?.source ?? "NONE") as SuggestionSource,
+    confidence: palpite?.confidence ?? 0,
+  }));
+
+  if (sugestoes.length > 0) {
+    await prisma.categorySuggestion.createMany({
+      data: sugestoes,
+      skipDuplicates: true,
+    });
+  }
+
+  // Contagem sobre o palpite, não sobre o retorno do `createMany`: o que a
+  // notificação quer dizer é quantas o app adivinhou, e `skipDuplicates` faz o
+  // count devolver zero para uma transação que já estava na fila desde antes.
+  const suggested = palpites.filter(({ palpite }) => palpite !== null).length;
+
+  return {
+    transfers: emTransferencia.size,
+    suggested,
+    withoutGuess: semDecisao.length - suggested,
+  };
+}
+
+/**
+ * O que o motor usa para arriscar um palpite: o histórico já categorizado pelo
+ * usuário e as categorias que ele pode escolher. As de sistema ficam de fora do
+ * histórico — "Sem categoria" não ensina nada, e "Transferência entre contas"
+ * ensinaria errado.
+ *
+ * `excluirTransacoes` tira do histórico as transações que estão sendo julgadas
+ * agora: elas ainda não são decisão de ninguém, e deixá-las entrar faria o
+ * palpite se apoiar em si mesmo.
+ */
+async function buildSuggestionContext(
+  userId: string,
+  systemIdSet: Set<string>,
+  excluirTransacoes: string[] = []
+): Promise<SuggestionContext> {
   const selecionaveis = await prisma.category.findMany({
     where: { userId, systemKey: null },
     select: { id: true, name: true },
@@ -146,12 +224,12 @@ export async function processNewTransactions(
     where: {
       userId,
       categoryId: { notIn: Array.from(systemIdSet) },
-      id: { notIn: novas.map((t) => t.id) },
+      ...(excluirTransacoes.length > 0 ? { id: { notIn: excluirTransacoes } } : {}),
     },
     select: { description: true, categoryId: true },
   });
 
-  const ctx = {
+  return {
     history: buildHistoryIndex(
       historico.filter(
         (t): t is { description: string; categoryId: string } => t.categoryId !== null
@@ -159,35 +237,60 @@ export async function processNewTransactions(
     ),
     categories: selecionaveis,
   };
+}
 
-  // 4. Sugestões. `skipDuplicates` cobre a transação que já foi julgada num
-  //    sync anterior: uma sugestão por transação, e pular é definitivo.
-  const sugestoes = semDecisao
-    .map((tx) => {
-      const palpite = suggestCategory({ description: tx.description }, ctx);
-      if (!palpite) return null;
-      return {
-        userId,
-        transactionId: tx.id,
-        categoryId: palpite.categoryId,
-        source: palpite.source as SuggestionSource,
-        confidence: palpite.confidence,
-      };
-    })
-    .filter((s): s is NonNullable<typeof s> => s !== null);
+/**
+ * Recalcula o palpite de todas as sugestões ainda pendentes.
+ *
+ * Roda depois de cada lote aprovado na revisão, e é o que faz a tela valer a
+ * pena: categorizar dez "IFOOD" ensina o histórico, e o mesmo histórico passa a
+ * responder por transações que na rodada anterior ninguém tinha adivinhado. Sem
+ * este passo, o que sobrasse na fila continuaria com o palpite (ou a falta
+ * dele) calculado no dia da importação.
+ *
+ * Fica de fora quem teve o palpite recusado à mão (`guessRejected`): devolver
+ * ali o palpite que o usuário acabou de desmarcar seria desfazer a decisão dele.
+ */
+export async function reevaluatePendingSuggestions(userId: string): Promise<number> {
+  const pendentes = await prisma.categorySuggestion.findMany({
+    where: { userId, status: SuggestionStatus.PENDING, guessRejected: false },
+    select: {
+      id: true,
+      categoryId: true,
+      source: true,
+      confidence: true,
+      transaction: { select: { description: true } },
+    },
+  });
+  if (pendentes.length === 0) return 0;
 
-  let suggested = 0;
-  if (sugestoes.length > 0) {
-    const result = await prisma.categorySuggestion.createMany({
-      data: sugestoes,
-      skipDuplicates: true,
-    });
-    suggested = result.count;
+  const systemIds = await ensureSystemCategories(prisma, userId);
+  const ctx = await buildSuggestionContext(userId, new Set(Object.values(systemIds)));
+
+  const mudancas = pendentes.flatMap((pendente) => {
+    const palpite = suggestCategory({ description: pendente.transaction.description }, ctx);
+    const categoryId = palpite?.categoryId ?? null;
+    const source = (palpite?.source ?? "NONE") as SuggestionSource;
+    const confidence = palpite?.confidence ?? 0;
+
+    const igual =
+      categoryId === pendente.categoryId &&
+      source === pendente.source &&
+      confidence === pendente.confidence;
+
+    return igual
+      ? []
+      : [
+          prisma.categorySuggestion.update({
+            where: { id: pendente.id },
+            data: { categoryId, source, confidence },
+          }),
+        ];
+  });
+
+  if (mudancas.length > 0) {
+    await prisma.$transaction(mudancas);
   }
 
-  return {
-    transfers: emTransferencia.size,
-    suggested,
-    withoutGuess: semDecisao.length - suggested,
-  };
+  return mudancas.length;
 }

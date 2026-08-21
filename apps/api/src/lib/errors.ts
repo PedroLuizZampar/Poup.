@@ -139,9 +139,3 @@ export class SystemCategoryError extends BadRequestError {
     super("Esta categoria é mantida pelo Poup e não pode ser editada ou excluída");
   }
 }
-
-export class SuggestionNotFoundError extends NotFoundError {
-  constructor() {
-    super("Sugestão não encontrada");
-  }
-}

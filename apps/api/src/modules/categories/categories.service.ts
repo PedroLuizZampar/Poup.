@@ -1,4 +1,4 @@
-import { TransactionType } from "@prisma/client";
+import { SuggestionSource, SuggestionStatus, TransactionType } from "@prisma/client";
 import { prisma } from "../../prisma";
 import {
   CategoryAlreadyExistsError,
@@ -141,6 +141,15 @@ export async function deleteCategory(userId: string, id: string) {
     await tx.transaction.updateMany({
       where: { userId, categoryId: id, type: TransactionType.INCOME },
       data: { categoryId: systemIds.UNCATEGORIZED_INCOME },
+    });
+
+    // A FK já faria `categoryId` virar null sozinha (ON DELETE SET NULL), mas
+    // deixaria `source` mentindo: uma sugestão sem categoria anunciada como
+    // vinda do histórico. Aqui as pendentes viram explicitamente "sem palpite",
+    // que é o que de fato sobrou — e as transações seguem na fila de revisão.
+    await tx.categorySuggestion.updateMany({
+      where: { userId, categoryId: id, status: SuggestionStatus.PENDING },
+      data: { categoryId: null, source: SuggestionSource.NONE, confidence: 0 },
     });
 
     await tx.category.delete({ where: { id } });

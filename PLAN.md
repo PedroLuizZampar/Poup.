@@ -75,9 +75,22 @@ Poup/
 29. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro)
 30. Skeletons de carregamento, estados vazios, toasts e diálogos de confirmação
 31. Painel de notificações, com item clicável quando a notificação leva a uma rota
-32. Tela de revisão (`/revisao`), uma sugestão por vez, alcançável pela
-    notificação e pelo botão "Sugestões" com contador no Dashboard e em
-    Transações
+32. Tela de revisão (`/revisao`), **em lote, uma categoria por página**,
+    alcançável pela notificação e pelo botão "Sugestões" com contador no
+    Dashboard e em Transações. A fila é **toda transação sem categoria**, e não
+    só a que o app adivinhou: quem não recebeu palpite entra como
+    `CategorySuggestion` de `source = NONE` e `categoryId` nulo. Sem isso, os
+    80% que o motor não adivinha em conta nova sumiam do contador, da
+    notificação e da tela. Cada página lista as transações sugeridas para uma
+    categoria, **todas pré-marcadas**: você desmarca o que não for e confirma —
+    o que estava marcado recebe a categoria, o que foi desmarcado vira palpite
+    recusado (`guessRejected`) e cai na última página. A cada lote confirmado o
+    servidor **reavalia todas as pendentes** com o histórico recém-aprendido
+    (`reevaluatePendingSuggestions`), e as páginas são desenhadas de novo — dez
+    "IFOOD" categorizados de uma vez ensinam o motor a responder pelas que
+    ninguém tinha adivinhado. "Sem categoria definida" é sempre a última página:
+    lá nada vem pré-marcado, você escolhe uma categoria e aplica às marcadas, ou
+    dispensa as que não quer decidir
 
 ### Mobile
 33. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem

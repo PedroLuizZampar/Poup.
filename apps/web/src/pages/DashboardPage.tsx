@@ -32,6 +32,7 @@ import { MonthSummaryPanel } from "../components/dashboard/MonthSummaryPanel";
 import { useToast } from "../components/ui/Toast";
 import { useCategories } from "../hooks/useCategories";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
+import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
 import { useMonthNavigation } from "../hooks/useMonthNavigation";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { summarizeAccounts } from "../lib/accounts";
@@ -99,6 +100,9 @@ export function DashboardPage() {
       // Os alertas de orçamento são gerados aqui, depois do sync — que é quando
       // os dados de fato mudaram. Abrir o sininho não escreve mais no banco.
       await checkNotifications().catch(() => undefined);
+      // O sync é o que enche a fila: sem avisar, o botão Sugestões só apareceria
+      // no próximo carregamento da página.
+      notifySuggestionsChanged();
       await loadDashboard();
     } catch (err: any) {
       // A mensagem da API distingue "sem credencial cadastrada" e "sem conexão
@@ -119,7 +123,6 @@ export function DashboardPage() {
   const totalIncome = summary?.income ?? 0;
   const totalExpense = summary?.expense ?? 0;
   const transactionCount = summary?.transactionCount ?? 0;
-  const uncategorizedCount = summary?.uncategorizedCount ?? 0;
 
   const chartData = useMemo(
     () =>
@@ -139,14 +142,15 @@ export function DashboardPage() {
     <div className="flex flex-col gap-8 anim-fade-up">
       {/* Header com Navegação de Mês */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="min-w-0">
+        <div className="shrink-0">
           <span className="text-xs md:text-sm text-text-secondary">
             Olá, {user.name.split(" ")[0]}
           </span>
-          {/* O nome do mês trunca em vez de empurrar as setas para fora da tela:
-              em 360px "Setembro de 2026" a 24px já não cabe ao lado de dois
-              botões e do atalho de volta ao mês corrente. */}
-          <div className="flex items-center gap-2 sm:gap-3 mt-1 min-w-0">
+          {/* O nome do mês nunca corta: ele é o título da tela e "Setem..." não
+              diz em que mês o usuário está. Quem cede é o tamanho da fonte, que
+              cai um degrau por breakpoint, e a linha, que quebra o atalho de
+              volta ao mês corrente para baixo quando o conjunto não cabe. */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
             <button
               type="button"
               onClick={month.goToPreviousMonth}
@@ -156,7 +160,7 @@ export function DashboardPage() {
             >
               <ChevronLeftIcon className="w-4 h-4" />
             </button>
-            <h1 className="font-display font-extrabold text-2xl md:text-3xl tracking-tight text-text-primary truncate min-w-0">
+            <h1 className="font-display font-extrabold text-xl sm:text-2xl md:text-3xl tracking-tight text-text-primary whitespace-nowrap">
               {month.fullName}
             </h1>
             <button
@@ -180,7 +184,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-3 min-w-0">
           <SuggestionsButton />
           <Button
             variant="secondary"
@@ -301,26 +305,6 @@ export function DashboardPage() {
 
         {/* Coluna Direita (Widgets) */}
         <div className="flex flex-col gap-6">
-          {/* Banner de Transações sem Categoria */}
-          {uncategorizedCount > 0 && (
-            <Link
-              to="/transacoes?uncategorized=true"
-              className="bg-primary-soft text-primary rounded-panel p-5 flex items-center gap-4 group hover:shadow-sh2 transition-all border border-primary/20"
-            >
-              <div className="w-10 h-10 rounded-tile bg-surface text-primary font-display font-extrabold text-sm flex items-center justify-center shrink-0 shadow-sh1">
-                {uncategorizedCount}
-              </div>
-              <span className="flex-1 font-semibold text-xs md:text-sm leading-snug">
-                {uncategorizedCount === 1
-                  ? "1 transação sem categoria"
-                  : `${uncategorizedCount} transações sem categoria`}
-              </span>
-              <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </Link>
-          )}
-
           {/* Widget Minhas Contas */}
           <Card
             variant="widget"

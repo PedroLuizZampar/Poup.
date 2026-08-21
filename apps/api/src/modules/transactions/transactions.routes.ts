@@ -47,6 +47,8 @@ const queryFilterSchema = z.object({
     .optional(),
   type: z.enum(["INCOME", "EXPENSE"]).optional(),
   search: z.string().optional(),
+  minAmount: z.coerce.number().min(0).optional(),
+  maxAmount: z.coerce.number().min(0).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 

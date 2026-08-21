@@ -11,6 +11,7 @@ import { SimilarTransactionsModal } from "./SimilarTransactionsModal";
 import { useToast } from "../ui/Toast";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { useCategoryMap } from "../../hooks/useCategories";
+import { displayCategory } from "../../lib/categories";
 
 interface TransactionDetailModalProps {
   transaction: TransactionDTO | null;
@@ -51,6 +52,11 @@ export function TransactionDetailModal({
     [categories]
   );
 
+  // A oculta "Sem categoria (despesa/receita)" é o `null` da tela: o seletor
+  // precisa marcá-la como "Sem categoria" em vez de não marcar nada.
+  const currentCategory = displayCategory(categoryId ? categoryMap[categoryId] : null);
+  const selectedInPicker = currentCategory?.id ?? null;
+
   if (!transaction) return null;
 
   async function handleSave(e: FormEvent) {
@@ -70,7 +76,7 @@ export function TransactionDetailModal({
       // A categoria desta transação já está salva; o modal cuida só das outras.
       // Só faz sentido quando a categoria de fato mudou para uma selecionável —
       // repetir uma oculta em massa não é uma decisão, é um estado de espera.
-      const escolhida = categoryId ? categoryMap[categoryId] : null;
+      const escolhida = displayCategory(categoryId ? categoryMap[categoryId] : null);
       const mudou = Boolean(categoryId) && categoryId !== transaction.categoryId;
       if (mudou && escolhida && !escolhida.systemKey) {
         setSimilarFor(categoryId);
@@ -161,16 +167,14 @@ export function TransactionDetailModal({
             className="w-full h-ctl px-3.5 flex items-center justify-between gap-2 rounded-ctl bg-surface-alt text-text-primary border border-border hover:border-border-strong focus-ring cursor-pointer select-none transition-[border-color,box-shadow] duration-150 text-left text-sm"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              {categoryId && categoryMap[categoryId] ? (
+              {currentCategory ? (
                 <>
                   <CategoryTile
-                    icon={categoryMap[categoryId].icon}
-                    colorKey={categoryMap[categoryId].colorKey}
+                    icon={currentCategory.icon}
+                    colorKey={currentCategory.colorKey}
                     size="sm"
                   />
-                  <span className="truncate font-medium">
-                    {categoryMap[categoryId].name}
-                  </span>
+                  <span className="truncate font-medium">{currentCategory.name}</span>
                 </>
               ) : (
                 <>
@@ -204,7 +208,7 @@ export function TransactionDetailModal({
             isOpen={isCategoryModalOpen}
             onClose={() => setIsCategoryModalOpen(false)}
             categories={selectableCategories}
-            selectedCategoryId={categoryId}
+            selectedCategoryId={selectedInPicker}
             onSelectCategory={setCategoryId}
           />
         </Field>

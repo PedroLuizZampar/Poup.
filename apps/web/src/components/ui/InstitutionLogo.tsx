@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { BankIcon } from "../icons/Icons";
 import { resolveInstitutionLogo } from "../../lib/institutions";
 
-export type InstitutionLogoSize = "sm" | "md" | "lg";
+export type InstitutionLogoSize = "xs" | "sm" | "md" | "lg";
 
 export interface InstitutionLogoProps {
   name?: string | null;
@@ -14,12 +14,15 @@ export interface InstitutionLogoProps {
 }
 
 const sizeClasses: Record<InstitutionLogoSize, string> = {
+  /** Cabe dentro de um controle de 44px sem esticá-lo — o select de contas. */
+  xs: "w-6 h-6 rounded-tile",
   sm: "w-8 h-8 rounded-tile",
   md: "w-10 h-10 rounded-tile",
   lg: "w-12 h-12 rounded-card",
 };
 
 const iconClasses: Record<InstitutionLogoSize, string> = {
+  xs: "w-3.5 h-3.5",
   sm: "w-4 h-4",
   md: "w-5 h-5",
   lg: "w-6 h-6",

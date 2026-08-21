@@ -193,6 +193,10 @@ export interface TransactionFilterQuery {
   uncategorized?: boolean | string;
   type?: TransactionType;
   search?: string;
+  /** Piso do valor absoluto da transacao, em reais. */
+  minAmount?: number;
+  /** Teto do valor absoluto da transacao, em reais. */
+  maxAmount?: number;
   /** Teto de resultados. O painel usa 5 — ele so mostra as ultimas. */
   limit?: number;
 }
@@ -307,10 +311,31 @@ export interface ReportSummaryDTO {
 export interface SuggestionDTO {
   id: string;
   transaction: TransactionDTO;
-  suggestedCategoryId: string;
-  suggestedCategoryName: string;
-  source: "HISTORY" | "RULE" | "PLUGGY";
+  /**
+   * Null quando o app nao teve palpite (`source: "NONE"`) ou quando o palpite
+   * foi recusado a mao na revisao. A transacao esta na fila do mesmo jeito: o
+   * que a fila lista e transacao sem categoria, e nao palpite do app. Na tela,
+   * e o que cai na ultima pagina, "Sem categoria definida".
+   */
+  suggestedCategoryId: string | null;
+  suggestedCategoryName: string | null;
+  source: "HISTORY" | "RULE" | "PLUGGY" | "NONE";
   confidence: number;
+}
+
+export interface SuggestionsResponse {
+  suggestions: SuggestionDTO[];
+  count: number;
+}
+
+/** O corpo de `POST /suggestions/apply`: uma pagina da revisao, confirmada. */
+export interface ApplySuggestionsPayload {
+  /** A categoria da pagina — a mesma para o lote inteiro. */
+  categoryId: string;
+  /** Sugestoes marcadas: a transacao recebe a categoria. */
+  acceptIds: string[];
+  /** Sugestoes desmarcadas: perdem o palpite e caem na ultima pagina. */
+  rejectIds: string[];
 }
 
 export interface SimilarTransactionDTO extends TransactionDTO {

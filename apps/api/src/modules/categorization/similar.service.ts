@@ -8,6 +8,7 @@ import {
   TransactionNotFoundError,
 } from "../../lib/errors";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import { reevaluatePendingSuggestions } from "./categorization.service";
 
 /**
  * Tetos deliberados: este é o único caminho que compara par a par em vez de
@@ -128,6 +129,11 @@ export async function bulkCategorize(
 
     return updated.count;
   });
+
+  // O lote que acabou de ser aplicado é histórico novo: o que continua na fila
+  // merece um palpite calculado com ele. É o mesmo passo que a revisão dá a
+  // cada página confirmada — aplicar em parecidas ensina tanto quanto.
+  await reevaluatePendingSuggestions(userId);
 
   return { updated: result };
 }

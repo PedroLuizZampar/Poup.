@@ -9,6 +9,7 @@ import {
   deleteItem,
   clearToken,
 } from "../lib/api";
+import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
 import {
   RefreshIcon,
   TrashIcon,
@@ -97,6 +98,7 @@ export function ProfilePage({
       toast.success(
         `Sincronização concluída! ${res.accountsSynced} contas e ${res.transactionsSynced} transações atualizadas.`
       );
+      notifySuggestionsChanged();
       await loadData();
     } catch (err: any) {
       toast.error(err.message || "Erro ao sincronizar contas.");
@@ -112,6 +114,7 @@ export function ProfilePage({
       toast.success(
         `Instituição sincronizada! ${res.accountsSynced} contas e ${res.transactionsSynced} transações atualizadas.`
       );
+      notifySuggestionsChanged();
       await loadData();
     } catch (err: any) {
       toast.error(err.message || "Erro ao sincronizar instituição.");

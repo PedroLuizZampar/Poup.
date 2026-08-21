@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
-  acceptSuggestion,
+  applySuggestions,
   countPendingSuggestions,
-  dismissSuggestion,
+  dismissSuggestions,
   listPendingSuggestions,
 } from "./suggestions.service";
 import { requireAuth } from "../../middleware/requireAuth";
@@ -13,8 +13,16 @@ export const suggestionsRouter = Router();
 
 suggestionsRouter.use(requireAuth);
 
-const acceptSchema = z.object({
-  categoryId: z.string().min(1).optional(),
+const applySchema = z.object({
+  categoryId: z.string().min(1),
+  // Lote vazio é legítimo: desmarcar tudo e confirmar é como se diz "nenhuma
+  // destas é desta categoria", e o que sai daí são só recusas.
+  acceptIds: z.array(z.string().min(1)).default([]),
+  rejectIds: z.array(z.string().min(1)).default([]),
+});
+
+const dismissSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1),
 });
 
 suggestionsRouter.get(
@@ -31,17 +39,20 @@ suggestionsRouter.get(
   })
 );
 
+// As duas respondem com a fila já recarregada: depois de aplicar um lote o
+// servidor reavalia as pendentes, então a lista que o cliente tinha na mão
+// envelheceu no mesmo instante em que ele a confirmou.
 suggestionsRouter.post(
-  "/:id/accept",
+  "/apply",
   asyncHandler(async (req, res) => {
-    const { categoryId } = acceptSchema.parse(req.body ?? {});
-    res.json(await acceptSuggestion(req.userId!, req.params.id, categoryId));
+    res.json(await applySuggestions(req.userId!, applySchema.parse(req.body ?? {})));
   })
 );
 
 suggestionsRouter.post(
-  "/:id/dismiss",
+  "/dismiss",
   asyncHandler(async (req, res) => {
-    res.json(await dismissSuggestion(req.userId!, req.params.id));
+    const { ids } = dismissSchema.parse(req.body ?? {});
+    res.json(await dismissSuggestions(req.userId!, ids));
   })
 );
