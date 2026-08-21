@@ -1,4 +1,4 @@
-import { SuggestionSource, SuggestionStatus, TransactionType } from "@prisma/client";
+import { SuggestionSource, SuggestionStatus } from "@prisma/client";
 import { prisma } from "../../prisma";
 import {
   CategoryAlreadyExistsError,
@@ -135,12 +135,8 @@ export async function deleteCategory(userId: string, id: string) {
     const systemIds = await ensureSystemCategories(tx, userId);
 
     await tx.transaction.updateMany({
-      where: { userId, categoryId: id, type: TransactionType.EXPENSE },
-      data: { categoryId: systemIds.UNCATEGORIZED_EXPENSE },
-    });
-    await tx.transaction.updateMany({
-      where: { userId, categoryId: id, type: TransactionType.INCOME },
-      data: { categoryId: systemIds.UNCATEGORIZED_INCOME },
+      where: { userId, categoryId: id },
+      data: { categoryId: systemIds.UNCATEGORIZED },
     });
 
     // A FK já faria `categoryId` virar null sozinha (ON DELETE SET NULL), mas

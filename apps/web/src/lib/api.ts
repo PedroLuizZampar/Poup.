@@ -210,7 +210,7 @@ export async function fetchAccounts(): Promise<AccountDTO[]> {
   return res.accounts;
 }
 
-export async function renameAccount(id: string, data: UpdateAccountRequest): Promise<AccountDTO> {
+export async function updateAccount(id: string, data: UpdateAccountRequest): Promise<AccountDTO> {
   const res = await request<{ account: AccountDTO }>(`/accounts/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),

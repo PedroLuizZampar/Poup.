@@ -2,10 +2,7 @@ export type TransactionType = "INCOME" | "EXPENSE";
 
 export type BudgetStatus = "ok" | "warning" | "exceeded";
 
-export type SystemCategoryKey =
-  | "TRANSFER"
-  | "UNCATEGORIZED_EXPENSE"
-  | "UNCATEGORIZED_INCOME";
+export type SystemCategoryKey = "TRANSFER" | "UNCATEGORIZED";
 
 export interface CategoryDTO {
   id: string;
@@ -35,6 +32,8 @@ export interface AccountDTO {
   itemId?: string | null;
   pluggyAccountId?: string | null;
   lastSyncedAt: string | null;
+  /** Ligada, a conta nao entra nos cards de saldo do Dashboard. */
+  excludedFromBalance: boolean;
 }
 
 export interface TransactionDTO {
@@ -104,7 +103,9 @@ export interface UpdateGoalRequest {
 
 export interface UpdateAccountRequest {
   /** Novo nome. String vazia ou null volta ao nome original do banco. */
-  name: string | null;
+  name?: string | null;
+  /** Ligada, a conta sai dos cards de saldo do Dashboard. */
+  excludedFromBalance?: boolean;
 }
 
 export interface UpdateItemImageRequest {

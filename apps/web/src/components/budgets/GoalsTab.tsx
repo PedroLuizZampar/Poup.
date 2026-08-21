@@ -15,6 +15,7 @@ import { CardSkeleton } from "../common/Skeleton";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { formatCurrency, formatDate } from "../../lib/format";
+import { Money } from "../ui/Money";
 
 export interface GoalsTabProps {
   goals: GoalDTO[];
@@ -189,7 +190,7 @@ export function GoalsTab({ goals, accounts, loading, onRefresh }: GoalsTabProps)
                       {g.name}
                     </h3>
                     <p className="text-caption text-text-secondary mt-0.5 tnum">
-                      Alvo: {formatCurrency(g.targetAmount)}
+                      Alvo: <Money value={g.targetAmount} />
                     </p>
                   </div>
 
@@ -239,10 +240,10 @@ export function GoalsTab({ goals, accounts, loading, onRefresh }: GoalsTabProps)
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-caption">
                     <span className="font-semibold text-text-primary tnum">
-                      {formatCurrency(g.currentAmount)} acumulados
+                      <Money value={g.currentAmount} /> acumulados
                     </span>
                     <span className="text-text-secondary tnum">
-                      Falta {formatCurrency(g.remainingAmount)}
+                      Falta <Money value={g.remainingAmount} />
                     </span>
                   </div>
                   <ProgressBar value={g.currentAmount} max={g.targetAmount} size="sm" />
@@ -252,7 +253,7 @@ export function GoalsTab({ goals, accounts, loading, onRefresh }: GoalsTabProps)
                   <div className="bg-surface-alt/70 rounded-tile p-3 text-caption text-text-secondary flex items-center justify-between border border-border/50">
                     <span>Ritmo mensal sugerido:</span>
                     <span className="font-bold text-primary tnum">
-                      {formatCurrency(g.monthlyPaceNeeded)} / mês
+                      <Money value={g.monthlyPaceNeeded} /> / mês
                     </span>
                   </div>
                 )}

@@ -9,7 +9,7 @@ import {
   type SuggestionContext,
   type TransferCandidate,
 } from "../../lib/categorization";
-import { ensureSystemCategories, uncategorizedKeyFor } from "../../lib/systemCategories";
+import { ensureSystemCategories } from "../../lib/systemCategories";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -134,23 +134,18 @@ export async function processNewTransactions(
     });
   }
 
-  // 2. O resto cai na oculta do próprio tipo — mas só o que ainda não tem
-  //    categoria nenhuma. O pipeline preenche vazio; ele não desfaz decisão.
-  //    Sem esse filtro, chamá-lo duas vezes sobre os mesmos ids arrancaria as
+  // 2. O resto cai em "Sem categoria" — mas só o que ainda não tem categoria
+  //    nenhuma. O pipeline preenche vazio; ele não desfaz decisão. Sem esse
+  //    filtro, chamá-lo duas vezes sobre os mesmos ids arrancaria as
   //    transferências recém-pareadas de volta para "Sem categoria".
   const semDecisao = novas.filter(
     (t) => !emTransferencia.has(t.id) && t.categoryId === null
   );
 
-  for (const key of [
-    SystemCategoryKey.UNCATEGORIZED_EXPENSE,
-    SystemCategoryKey.UNCATEGORIZED_INCOME,
-  ] as const) {
-    const ids = semDecisao.filter((t) => uncategorizedKeyFor(t.type) === key).map((t) => t.id);
-    if (ids.length === 0) continue;
+  if (semDecisao.length > 0) {
     await prisma.transaction.updateMany({
-      where: { id: { in: ids }, userId },
-      data: { categoryId: systemIds[key] },
+      where: { id: { in: semDecisao.map((t) => t.id) }, userId },
+      data: { categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED] },
     });
   }
 
@@ -293,4 +288,37 @@ export async function reevaluatePendingSuggestions(userId: string): Promise<numb
   }
 
   return mudancas.length;
+}
+
+/**
+ * Devolve uma transação para a fila de revisão.
+ *
+ * Marcar "Sem categoria" à mão é dizer "isto ainda não está decidido" — e o
+ * lugar de uma decisão pendente é `/revisao`, não uma tela onde ela só reapareça
+ * se alguém filtrar. Sem isto, trocar a categoria por "Sem categoria" mudava a
+ * linha e mais nada: a transação não voltava para o contador nem para a fila.
+ *
+ * Entra como `NONE` com `guessRejected`: quem acabou de tirar a categoria à mão
+ * não quer que a reavaliação do próximo lote devolva um palpite para o mesmo
+ * comerciante. Ela cai na última página da revisão, onde a escolha é manual.
+ */
+export async function reopenPendingSuggestion(
+  userId: string,
+  transactionId: string
+): Promise<void> {
+  const pendente = {
+    categoryId: null,
+    source: SuggestionSource.NONE,
+    confidence: 0,
+    status: SuggestionStatus.PENDING,
+    guessRejected: true,
+    resolvedCategoryId: null,
+    resolvedAt: null,
+  };
+
+  await prisma.categorySuggestion.upsert({
+    where: { transactionId },
+    create: { userId, transactionId, ...pendente },
+    update: pendente,
+  });
 }

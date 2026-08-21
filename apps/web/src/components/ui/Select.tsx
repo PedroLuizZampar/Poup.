@@ -322,6 +322,11 @@ export function Select<T extends string | number>({
         createPortal(
           <div
             className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm anim-fade-in"
+            /* A folha vive num portal, fora da árvore de quem abriu o Select.
+               Quem fecha em clique externo (o popover de filtros) precisa saber
+               reconhecê-la, ou tocar numa opção derrubaria o painel inteiro
+               antes de a escolha chegar. */
+            data-select-sheet=""
             onClick={(e) => {
               if (e.target === e.currentTarget) setIsOpen(false);
             }}

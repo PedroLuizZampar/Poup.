@@ -35,26 +35,36 @@ export async function listAccounts(userId: string): Promise<AccountDTO[]> {
       itemId: acc.itemId,
       pluggyAccountId: acc.pluggyAccountId,
       lastSyncedAt: acc.lastSyncedAt?.toISOString() ?? null,
+      excludedFromBalance: acc.excludedFromBalance,
     };
   });
 }
 
-/** `name` vazio ou null remove o apelido e volta ao nome vindo do banco. */
-export async function renameAccount(
+export interface UpdateAccountInput {
+  /** Vazio ou null remove o apelido e volta ao nome vindo do banco. */
+  name?: string | null;
+  excludedFromBalance?: boolean;
+}
+
+/** Os campos que o usuário edita numa conta. Ausente é "não mexa". */
+export async function updateAccount(
   userId: string,
   id: string,
-  name: string | null
+  input: UpdateAccountInput
 ): Promise<AccountDTO> {
   const existing = await prisma.account.findFirst({ where: { id, userId } });
   if (!existing) {
     throw new AccountNotFoundError();
   }
 
-  const customName = name?.trim() ? name.trim() : null;
-
   await prisma.account.update({
     where: { id },
-    data: { customName },
+    data: {
+      ...(input.name !== undefined && { customName: input.name?.trim() || null }),
+      ...(input.excludedFromBalance !== undefined && {
+        excludedFromBalance: input.excludedFromBalance,
+      }),
+    },
   });
 
   const accounts = await listAccounts(userId);

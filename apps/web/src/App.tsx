@@ -14,6 +14,7 @@ import { PlanningPage } from "./pages/PlanningPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { ThemeProvider } from "./context/ThemeContext";
+import { PrivacyProvider } from "./context/PrivacyContext";
 import { ToastProvider } from "./components/ui/Toast";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
 import { OfflineScreen } from "./components/common/OfflineScreen";
@@ -75,7 +76,8 @@ export function App() {
 
   return (
     <ThemeProvider>
-      <ToastProvider>
+      <PrivacyProvider>
+        <ToastProvider>
         <ConfirmProvider>
           {checking ? (
             <div className="min-h-dvh flex items-center justify-center bg-bg">
@@ -130,8 +132,9 @@ export function App() {
             </BrowserRouter>
           )}
           <UpdateBanner />
-        </ConfirmProvider>
-      </ToastProvider>
+          </ConfirmProvider>
+        </ToastProvider>
+      </PrivacyProvider>
     </ThemeProvider>
   );
 }

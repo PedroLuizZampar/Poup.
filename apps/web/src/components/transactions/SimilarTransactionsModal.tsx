@@ -5,7 +5,8 @@ import type { CategoryMap } from "../../hooks/useCategories";
 import { notifySuggestionsChanged } from "../../hooks/useSuggestionsCount";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
-import { formatCurrency, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { Money } from "../ui/Money";
 
 interface SimilarTransactionsModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ function Linha({
         }`}
       >
         {tx.type === "INCOME" ? "+ " : "- "}
-        {formatCurrency(tx.amount)}
+        <Money value={tx.amount} />
       </span>
     </label>
   );

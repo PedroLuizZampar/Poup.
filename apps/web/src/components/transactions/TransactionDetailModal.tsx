@@ -9,9 +9,10 @@ import { CategoryTile } from "../ui/CategoryTile";
 import { CategorySelectModal } from "../categories/CategorySelectModal";
 import { SimilarTransactionsModal } from "./SimilarTransactionsModal";
 import { useToast } from "../ui/Toast";
-import { formatCurrency, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
 import { useCategoryMap } from "../../hooks/useCategories";
 import { displayCategory } from "../../lib/categories";
+import { Money } from "../ui/Money";
 
 interface TransactionDetailModalProps {
   transaction: TransactionDTO | null;
@@ -128,7 +129,7 @@ export function TransactionDetailModal({
                 }`}
               >
                 {transaction.type === "INCOME" ? "+ " : "- "}
-                {formatCurrency(transaction.amount)}
+                <Money value={transaction.amount} />
               </span>
             </div>
           </div>

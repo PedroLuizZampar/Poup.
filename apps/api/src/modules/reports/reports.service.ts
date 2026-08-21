@@ -253,16 +253,11 @@ export async function getReportSummary(
 
   const [totals, uncategorizedCount] = await Promise.all([
     totalsByType(userId, period, transferId),
-    // "Sem categoria" deixou de ser ausência e virou lugar: as duas ocultas.
+    // "Sem categoria" deixou de ser ausência e virou lugar: a oculta.
     prisma.transaction.count({
       where: {
         userId,
-        categoryId: {
-          in: [
-            systemIds[SystemCategoryKey.UNCATEGORIZED_EXPENSE],
-            systemIds[SystemCategoryKey.UNCATEGORIZED_INCOME],
-          ],
-        },
+        categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED],
         ...dateFilter(period),
       },
     }),

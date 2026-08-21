@@ -35,8 +35,7 @@ enum ItemStatus {
 
 enum SystemCategoryKey {
   TRANSFER
-  UNCATEGORIZED_EXPENSE
-  UNCATEGORIZED_INCOME
+  UNCATEGORIZED
 }
 
 enum SuggestionSource {
@@ -116,6 +115,9 @@ model Account {
   customName       String?
   type             AccountType
   balance          Decimal     @default(0) @db.Decimal(14, 2)
+  /// Preferência de exibição: a conta sai dos cards de saldo do Dashboard e
+  /// continua valendo em transações, relatórios e orçamentos.
+  excludedFromBalance Boolean  @default(false)
   institutionName  String?
   lastSyncedAt     DateTime?
   createdAt        DateTime    @default(now())

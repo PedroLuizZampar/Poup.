@@ -14,8 +14,8 @@ import { EmptyState } from "../common/EmptyState";
 import { CardSkeleton } from "../common/Skeleton";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
-import { formatCurrency } from "../../lib/format";
 import { useCategoryMap } from "../../hooks/useCategories";
+import { Money } from "../ui/Money";
 
 export interface BudgetsTabProps {
   budgets: BudgetDTO[];
@@ -167,7 +167,7 @@ export function BudgetsTab({ budgets, categories, loading, onRefresh }: BudgetsT
                         {b.categoryName}
                       </h3>
                       <p className="text-caption text-text-secondary mt-0.5 tnum">
-                        Limite de {formatCurrency(b.monthlyLimit)}
+                        Limite de <Money value={b.monthlyLimit} />
                       </p>
                     </div>
                   </div>
@@ -192,7 +192,7 @@ export function BudgetsTab({ budgets, categories, loading, onRefresh }: BudgetsT
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-caption font-semibold">
                     <span className="text-text-primary tnum">
-                      {formatCurrency(b.spent)}
+                      <Money value={b.spent} />
                     </span>
                     <span className="text-text-secondary tnum">
                       {Math.round(b.percentage)}%
@@ -208,9 +208,8 @@ export function BudgetsTab({ budgets, categories, loading, onRefresh }: BudgetsT
 
                 <div className="flex items-center justify-between pt-2 border-t border-border/50 text-caption">
                   <span className="text-text-secondary tnum">
-                    {remaining >= 0
-                      ? `Resta ${formatCurrency(remaining)}`
-                      : `Ultrapassou ${formatCurrency(Math.abs(remaining))}`}
+                    {remaining >= 0 ? "Resta " : "Ultrapassou "}
+                    <Money value={Math.abs(remaining)} />
                   </span>
                   <div className="flex items-center gap-3 shrink-0">
                     <button

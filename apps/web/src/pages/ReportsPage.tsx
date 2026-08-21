@@ -5,7 +5,8 @@ import { CardSkeleton } from "../components/common/Skeleton";
 import { EmptyState } from "../components/common/EmptyState";
 import { CategoryTile } from "../components/ui/CategoryTile";
 import { Select } from "../components/ui/Select";
-import { formatCurrency, formatPercent } from "../lib/format";
+import { formatPercent } from "../lib/format";
+import { Money } from "../components/ui/Money";
 
 /** Depois da 8ª categoria, a cauda vira uma linha só. */
 const TOP_CATEGORIES = 8;
@@ -113,7 +114,7 @@ export function ReportsPage() {
               Receitas no período
             </span>
             <div className="font-display font-extrabold text-num-xl text-income mt-0.5 tnum">
-              {formatCurrency(totalIncome)}
+              <Money value={totalIncome} />
             </div>
           </div>
 
@@ -122,7 +123,7 @@ export function ReportsPage() {
               Despesas no período
             </span>
             <div className="font-display font-extrabold text-num-xl text-expense mt-0.5 tnum">
-              {formatCurrency(totalExpense)}
+              <Money value={totalExpense} />
             </div>
           </div>
 
@@ -192,7 +193,7 @@ export function ReportsPage() {
 
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="font-display font-bold text-text-primary tnum">
-                        {formatCurrency(item.amount)}
+                        <Money value={item.amount} />
                       </span>
                       <span className="text-caption font-semibold text-text-secondary w-12 text-right tnum">
                         {item.percentage.toFixed(1)}%

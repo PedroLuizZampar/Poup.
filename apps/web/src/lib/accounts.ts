@@ -19,6 +19,9 @@ export interface AccountTotals {
  * com fatura aberta o saldo aparecia inflado exatamente pelo que se deve. E
  * investimento, somado junto, mistura liquidez com patrimônio: responde à
  * pergunta errada quando o que se quer saber é "quanto posso gastar hoje".
+ *
+ * Contas marcadas como `excludedFromBalance` ficam de fora dos três totais — e
+ * só deles: as transações delas continuam contando em relatórios e orçamentos.
  */
 export function summarizeAccounts(accounts: AccountDTO[]): AccountTotals {
   const totals: AccountTotals = {
@@ -29,6 +32,8 @@ export function summarizeAccounts(accounts: AccountDTO[]): AccountTotals {
   };
 
   for (const account of accounts) {
+    if (account.excludedFromBalance) continue;
+
     switch (account.type) {
       case "CREDIT":
         totals.creditInvoices += Math.abs(account.balance);

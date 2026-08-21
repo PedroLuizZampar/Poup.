@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowUpIcon, ArrowDownIcon } from "../icons/Icons";
 import { formatCurrency, amountSizeClass } from "../../lib/format";
+import { Money } from "../ui/Money";
 
 export interface MonthSummaryPanelProps {
   /**
@@ -70,20 +71,20 @@ export function MonthSummaryPanel({
               "hero"
             )}`}
           >
-            {accountBalanceText}
+            <span className="money">{accountBalanceText}</span>
           </p>
         </div>
 
         <div className="flex flex-col items-start sm:items-end gap-1 shrink-0 pb-1.5">
           <span className="text-xs text-text-secondary">
-            {accountCount} {accountCount === 1 ? "conta conectada" : "contas conectadas"}
+            {accountCount} {accountCount === 1 ? "conta vinculada ao saldo" : "contas vinculadas ao saldo"}
           </span>
 
           {investmentTotal > 0 && (
             <span className={asideClasses}>
               Investimentos
               <strong className="font-semibold text-text-primary tnum">
-                {formatCurrency(investmentTotal)}
+                <Money value={investmentTotal} />
               </strong>
             </span>
           )}
@@ -92,7 +93,7 @@ export function MonthSummaryPanel({
             <span className={asideClasses}>
               Faturas em aberto
               <strong className="font-semibold text-expense tnum">
-                {formatCurrency(creditInvoiceTotal)}
+                <Money value={creditInvoiceTotal} />
               </strong>
             </span>
           )}
@@ -109,7 +110,7 @@ export function MonthSummaryPanel({
               incomeText
             )}`}
           >
-            {incomeText}
+            <span className="money">{incomeText}</span>
           </span>
           <span className="text-[11px] text-text-secondary">Entradas em {monthName}</span>
         </div>
@@ -123,7 +124,7 @@ export function MonthSummaryPanel({
               expenseText
             )}`}
           >
-            {expenseText}
+            <span className="money">{expenseText}</span>
           </span>
           <span className="text-[11px] text-text-secondary">Saídas em {monthName}</span>
         </div>
@@ -137,7 +138,7 @@ export function MonthSummaryPanel({
               balance < 0 ? "text-expense" : balance > 0 ? "text-income" : "text-text-primary"
             }`}
           >
-            {balanceText}
+            <span className="money">{balanceText}</span>
           </span>
           <span className="text-[11px] text-text-secondary">
             {balance >= 0 ? "Superávit no período" : "Déficit no período"}

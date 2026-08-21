@@ -10,7 +10,8 @@ import {
   CategoryNotFoundError,
   TransactionNotFoundError,
 } from "../../lib/errors";
-import { ensureSystemCategories, uncategorizedKeyFor } from "../../lib/systemCategories";
+import { ensureSystemCategories } from "../../lib/systemCategories";
+import { reopenPendingSuggestion } from "../categorization/categorization.service";
 
 export { AccountNotFoundError, CategoryNotFoundError, TransactionNotFoundError };
 
@@ -118,14 +119,9 @@ export async function listTransactions(
   }
 
   if (filters.uncategorized) {
-    // "Sem categoria" deixou de ser ausência e virou um lugar: as duas ocultas.
+    // "Sem categoria" deixou de ser ausência e virou um lugar: a oculta.
     const systemIds = await ensureSystemCategories(prisma, userId);
-    where.categoryId = {
-      in: [
-        systemIds[SystemCategoryKey.UNCATEGORIZED_EXPENSE],
-        systemIds[SystemCategoryKey.UNCATEGORIZED_INCOME],
-      ],
-    };
+    where.categoryId = systemIds[SystemCategoryKey.UNCATEGORIZED];
   } else if (filters.categoryId) {
     where.categoryId = filters.categoryId;
   }
@@ -207,11 +203,12 @@ export async function createTransaction(
   }
 
   // Nem a criação manual escapa da invariante: sem categoria escolhida, a
-  // transação nasce na oculta do próprio tipo.
+  // transação nasce em "Sem categoria".
   let categoryId = input.categoryId ?? null;
+  const semCategoria = !categoryId;
   if (!categoryId) {
     const systemIds = await ensureSystemCategories(prisma, userId);
-    categoryId = systemIds[uncategorizedKeyFor(input.type as PrismaTransactionType)];
+    categoryId = systemIds[SystemCategoryKey.UNCATEGORIZED];
   }
 
   const created = await prisma.transaction.create({
@@ -231,6 +228,12 @@ export async function createTransaction(
       category: { select: { name: true } },
     },
   });
+
+  // Lançamento manual sem categoria é uma decisão adiada como qualquer outra: a
+  // fila de revisão é onde ela espera.
+  if (semCategoria) {
+    await reopenPendingSuggestion(userId, created.id);
+  }
 
   return formatTransactionDTO(created);
 }
@@ -258,13 +261,13 @@ export async function updateTransaction(
 
   // Mover uma ponta para fora de "Transferência entre contas" significa que o
   // pareamento errou. Desfazer só o vínculo deixaria a outra ponta sozinha numa
-  // categoria que já não descreve nada — ela volta para a oculta do próprio
-  // tipo, onde o filtro "sem categoria" a encontra.
+  // categoria que já não descreve nada — ela volta para "Sem categoria", onde o
+  // filtro e a fila de revisão a encontram.
   if (input.categoryId !== undefined && existing.transferPairId) {
     const systemIds = await ensureSystemCategories(prisma, userId);
     const orfas = await prisma.transaction.findMany({
       where: { userId, transferPairId: existing.transferPairId, id: { not: id } },
-      select: { id: true, type: true },
+      select: { id: true },
     });
 
     for (const orfa of orfas) {
@@ -272,9 +275,10 @@ export async function updateTransaction(
         where: { id: orfa.id },
         data: {
           transferPairId: null,
-          categoryId: systemIds[uncategorizedKeyFor(orfa.type)],
+          categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED],
         },
       });
+      await reopenPendingSuggestion(userId, orfa.id);
     }
 
     await prisma.transaction.update({
@@ -285,12 +289,14 @@ export async function updateTransaction(
 
   // "Sem categoria" é uma escolha legítima na edição — o que ela não pode virar
   // é `null`, que quebraria a invariante de `categoryId` sempre preenchido. O
-  // pedido vira a oculta do tipo da transação, exatamente onde o filtro "sem
-  // categoria" e a fila de revisão a encontram.
+  // pedido vira a oculta, exatamente onde o filtro "sem categoria" e a fila de
+  // revisão a encontram.
   let nextCategoryId = input.categoryId;
+  let voltouParaAFila = false;
   if (input.categoryId === null) {
     const systemIds = await ensureSystemCategories(prisma, userId);
-    nextCategoryId = systemIds[uncategorizedKeyFor(existing.type)];
+    nextCategoryId = systemIds[SystemCategoryKey.UNCATEGORIZED];
+    voltouParaAFila = true;
   }
 
   const updated = await prisma.transaction.update({
@@ -306,6 +312,10 @@ export async function updateTransaction(
       category: { select: { name: true } },
     },
   });
+
+  if (voltouParaAFila) {
+    await reopenPendingSuggestion(userId, id);
+  }
 
   return formatTransactionDTO(updated);
 }

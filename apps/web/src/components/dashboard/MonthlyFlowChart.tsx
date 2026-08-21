@@ -1,5 +1,6 @@
 import React from "react";
 import { formatCurrency, formatCurrencyCompact } from "../../lib/format";
+import { Money } from "../ui/Money";
 
 export interface MonthlyFlowDatum {
   label: string;
@@ -84,7 +85,7 @@ function MonthTooltip({
             Receitas
           </span>
           <span className="text-[11px] font-semibold tnum text-text-primary">
-            {formatCurrency(datum.income)}
+            <Money value={datum.income} />
           </span>
         </div>
 
@@ -94,7 +95,7 @@ function MonthTooltip({
             Despesas
           </span>
           <span className="text-[11px] font-semibold tnum text-text-primary">
-            {formatCurrency(datum.expense)}
+            <Money value={datum.expense} />
           </span>
         </div>
 
@@ -105,7 +106,7 @@ function MonthTooltip({
               balance < 0 ? "text-expense" : "text-income"
             }`}
           >
-            {formatCurrency(balance, { showSign: true })}
+            <Money value={balance} showSign />
           </span>
         </div>
       </div>
@@ -152,7 +153,7 @@ export function MonthlyFlowChart({ data }: MonthlyFlowChartProps) {
             className="absolute right-0 -translate-y-1/2 text-[10px] font-medium tnum text-text-secondary whitespace-nowrap"
             style={{ top: `${(i / GRID_STEPS) * 100}%` }}
           >
-            {formatCurrencyCompact(value)}
+            <span className="money">{formatCurrencyCompact(value)}</span>
           </span>
         ))}
       </div>

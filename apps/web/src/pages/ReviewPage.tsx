@@ -10,7 +10,8 @@ import { EmptyState } from "../components/common/EmptyState";
 import { Button } from "../components/ui/Button";
 import { CategoryTile } from "../components/ui/CategoryTile";
 import { useConfirm } from "../components/ui/ConfirmDialog";
-import { formatCurrency, formatDate } from "../lib/format";
+import { formatDate } from "../lib/format";
+import { Money } from "../components/ui/Money";
 
 const SOURCE_LABEL: Record<SuggestionDTO["source"], string> = {
   HISTORY: "porque você já categorizou transações parecidas assim",
@@ -84,7 +85,7 @@ function Dados({ sugestao }: { sugestao: SuggestionDTO }) {
         }`}
       >
         {tx.type === "INCOME" ? "+ " : "- "}
-        {formatCurrency(tx.amount)}
+        <Money value={tx.amount} />
       </span>
     </>
   );

@@ -20,6 +20,7 @@ import { useToast } from "../components/ui/Toast";
 import { useCoarsePointer } from "../hooks/useMediaQuery";
 import { formatCurrency } from "../lib/format";
 import { getCurrentMonthStr } from "../lib/date";
+import { Money } from "../components/ui/Money";
 
 export function CategoriesPage() {
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
@@ -243,9 +244,13 @@ export function CategoriesPage() {
             Maior gasto este mês
           </span>
           <span className="text-num-lg font-display font-bold text-text-primary truncate tnum">
-            {topSpendingCategory
-              ? `${topSpendingCategory.name} (${formatCurrency(topSpendingCategory.spent)})`
-              : "Nenhum gasto"}
+            {topSpendingCategory ? (
+              <>
+                {topSpendingCategory.name} (<Money value={topSpendingCategory.spent} />)
+              </>
+            ) : (
+              "Nenhum gasto"
+            )}
           </span>
         </div>
       </div>
@@ -390,7 +395,7 @@ export function CategoriesPage() {
                   <div className="flex items-baseline justify-between">
                     <span className="text-xs text-text-secondary font-medium">Gasto no mês</span>
                     <span className="font-display font-bold text-sm text-text-primary tnum">
-                      {formatCurrency(spent)}
+                      <Money value={spent} />
                     </span>
                   </div>
 
@@ -399,7 +404,7 @@ export function CategoriesPage() {
                       <div className="flex items-center justify-between text-[11px] text-text-secondary">
                         <span>{percentage}% do limite</span>
                         <span className="tnum font-medium">
-                          {formatCurrency(budget.monthlyLimit)}
+                          <Money value={budget.monthlyLimit} />
                         </span>
                       </div>
                       <ProgressBar

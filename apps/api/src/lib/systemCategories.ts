@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { SystemCategoryKey, TransactionType } from "@prisma/client";
+import { SystemCategoryKey } from "@prisma/client";
 
 /**
  * As categorias que o app cria e mantém para si.
@@ -18,27 +18,14 @@ export const SYSTEM_CATEGORY_DEFS = [
     colorKey: "5",
   },
   {
-    systemKey: SystemCategoryKey.UNCATEGORIZED_EXPENSE,
-    name: "Sem categoria (despesa)",
-    icon: "dots",
-    colorKey: "5",
-  },
-  {
-    systemKey: SystemCategoryKey.UNCATEGORIZED_INCOME,
-    name: "Sem categoria (receita)",
+    systemKey: SystemCategoryKey.UNCATEGORIZED,
+    name: "Sem categoria",
     icon: "dots",
     colorKey: "5",
   },
 ] as const;
 
 export type SystemCategoryIds = Record<SystemCategoryKey, string>;
-
-/** A oculta em que uma transação sem palpite deve cair, pelo tipo dela. */
-export function uncategorizedKeyFor(type: TransactionType): SystemCategoryKey {
-  return type === TransactionType.EXPENSE
-    ? SystemCategoryKey.UNCATEGORIZED_EXPENSE
-    : SystemCategoryKey.UNCATEGORIZED_INCOME;
-}
 
 /**
  * Idempotente, e tolerante a quem já tinha uma categoria com o nome reservado:

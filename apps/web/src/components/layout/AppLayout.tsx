@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Logo } from "../icons/Logo";
-import { BellIcon, SunIcon, MoonIcon } from "../icons/Icons";
+import { BellIcon, SunIcon, MoonIcon, EyeIcon, EyeOffIcon } from "../icons/Icons";
 import { NotificationDrawer } from "../notifications/NotificationDrawer";
 import { BottomNav } from "./BottomNav";
 import { OfflineBanner } from "../common/OfflineScreen";
@@ -9,6 +9,7 @@ import { fetchNotifications, clearToken } from "../../lib/api";
 import { UserAvatar } from "../ui/UserAvatar";
 import type { UserDTO } from "@poup/shared";
 import { useTheme } from "../../context/ThemeContext";
+import { usePrivacy } from "../../context/PrivacyContext";
 import { useOnlineStatus } from "../../hooks/usePwa";
 
 export function AppLayout({
@@ -22,6 +23,7 @@ export function AppLayout({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { theme, toggleTheme } = useTheme();
+  const { hidden, toggle: togglePrivacy } = usePrivacy();
   const online = useOnlineStatus();
   const location = useLocation();
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -97,6 +99,20 @@ export function AppLayout({
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4 relative">
+          {/* Modo discreto. Ao contrário do tema, este fica na topbar também no
+              mobile: é justamente na rua, com alguém do lado, que se precisa
+              dele — e não vale nada se exigir três toques até o Perfil. */}
+          <button
+            type="button"
+            onClick={togglePrivacy}
+            className="w-10 h-10 rounded-full bg-surface-alt flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-sunken transition-colors focus-ring cursor-pointer"
+            title={hidden ? "Mostrar valores" : "Ocultar valores"}
+            aria-label={hidden ? "Mostrar valores" : "Ocultar valores"}
+            aria-pressed={hidden}
+          >
+            {hidden ? <EyeOffIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+          </button>
+
           {/* Alternar tema. Só no desktop: no mobile o controle vive na seção
               "Aparência" do Perfil, onde ele cabe com rótulo e alvo de toque. */}
           <button

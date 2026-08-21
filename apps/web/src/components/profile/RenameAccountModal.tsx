@@ -1,6 +1,6 @@
 import React, { useState, useEffect, FormEvent } from "react";
 import type { AccountDTO } from "@poup/shared";
-import { renameAccount } from "../../lib/api";
+import { updateAccount } from "../../lib/api";
 import { Modal } from "../ui/Modal";
 import { Field } from "../ui/Field";
 import { Input } from "../ui/Input";
@@ -31,7 +31,7 @@ export function RenameAccountModal({ account, onClose, onSaved }: RenameAccountM
     try {
       setSaving(true);
       // Vazio limpa o apelido e devolve o nome que vem do banco.
-      await renameAccount(account.id, { name: name.trim() || null });
+      await updateAccount(account.id, { name: name.trim() || null });
       toast.success("Conta renomeada.");
       onSaved();
       onClose();

@@ -34,10 +34,7 @@ export async function findSimilarTransactions(
   if (!base) throw new TransactionNotFoundError();
 
   const systemIds = await ensureSystemCategories(prisma, userId);
-  const semCategoria = [
-    systemIds[SystemCategoryKey.UNCATEGORIZED_EXPENSE],
-    systemIds[SystemCategoryKey.UNCATEGORIZED_INCOME],
-  ];
+  const semCategoria = [systemIds[SystemCategoryKey.UNCATEGORIZED]];
 
   const desde = new Date();
   desde.setMonth(desde.getMonth() - HISTORY_MONTHS);

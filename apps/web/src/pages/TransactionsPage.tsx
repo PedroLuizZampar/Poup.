@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, KeyboardEvent } from "react";
+import React, { useState, useEffect, useMemo, useRef, KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { TransactionDTO, CategoryDTO, AccountDTO } from "@poup/shared";
 import { fetchTransactions, fetchCategories, fetchAccounts } from "../lib/api";
@@ -18,6 +18,7 @@ import { formatCurrency, formatDate } from "../lib/format";
 import { useCategoryMap } from "../hooks/useCategories";
 import { displayCategory } from "../lib/categories";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
+import { Money } from "../components/ui/Money";
 
 /** "2026-08-20" -> "20/08/2026". Sem passar por Date: o input entrega o dia
  *  já no fuso do usuário, e reinterpretá-lo em UTC o atrasaria em um. */
@@ -54,6 +55,9 @@ export function TransactionsPage() {
   const [selectedTx, setSelectedTx] = useState<TransactionDTO | null>(null);
   /** No mobile os filtros moram numa folha só, atrás de um botão. */
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  /** No desktop, os mesmos filtros num popover ancorado ao botão de ícone. */
+  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
+  const filterPopoverRef = useRef<HTMLDivElement>(null);
 
   // Debounce da busca (300ms)
   useEffect(() => {
@@ -72,6 +76,32 @@ export function TransactionsPage() {
     }, 400);
     return () => clearTimeout(timer);
   }, [minAmount, maxAmount]);
+
+  // O popover fecha como qualquer menu: clique fora ou Esc. Sem isso ele ficaria
+  // aberto sobre a lista que o próprio filtro acabou de mudar.
+  useEffect(() => {
+    if (!isFilterPopoverOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      // A folha de opções do Select mora num portal: está fora do popover na
+      // árvore do DOM, mas é parte dele para o usuário.
+      if (target.closest?.("[data-select-sheet]")) return;
+      if (filterPopoverRef.current && !filterPopoverRef.current.contains(target)) {
+        setIsFilterPopoverOpen(false);
+      }
+    }
+    function handleEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setIsFilterPopoverOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isFilterPopoverOpen]);
 
   /** Faixas invertidas não viram busca: não há resultado possível. */
   const dateRangeInvalid = Boolean(startDate && endDate && startDate > endDate);
@@ -326,6 +356,30 @@ export function TransactionsPage() {
     </div>
   );
 
+  /* Os mesmos cinco campos, na mesma ordem, nos dois lugares que os mostram: a
+     folha do mobile e o popover do desktop. Antes o desktop tinha um arranjo
+     próprio — três selects numa linha e mais dois campos largos noutra — que
+     ocupava metade da tela acima da lista e ainda assim não cabia por inteiro. */
+  const filterFields = (
+    <div className="flex flex-col gap-4">
+      <Field label="Conta">{accountSelect}</Field>
+      <Field label="Tipo">{typeSelect}</Field>
+      <Field label="Categoria">{categorySelect}</Field>
+      <Field
+        label="Período"
+        error={dateRangeInvalid ? "A data inicial vem depois da final." : undefined}
+      >
+        {dateRangeFields}
+      </Field>
+      <Field
+        label="Faixa de valor"
+        error={amountRangeInvalid ? "O valor mínimo é maior que o máximo." : undefined}
+      >
+        {amountRangeFields}
+      </Field>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-6 anim-fade-up">
       {/* Header */}
@@ -367,13 +421,58 @@ export function TransactionsPage() {
             )}
           </div>
 
-          {/* Selects — inline a partir de `md`. Abaixo disso três caixas de
-              larguras diferentes, centralizadas e sem alinhamento entre si; a
-              folha de filtros resolve com uma coluna só. */}
-          <div className="hidden md:flex items-center gap-2.5 flex-wrap">
-            <div className="w-52">{accountSelect}</div>
-            <div className="w-44">{typeSelect}</div>
-            <div className="w-56">{categorySelect}</div>
+          {/* Desktop: um botão só, do tamanho de um ícone, e os filtros num
+              popover. Os chips logo abaixo continuam dizendo o que está ativo —
+              é deles o trabalho de mostrar estado, não de cinco caixas
+              permanentes. */}
+          <div ref={filterPopoverRef} className="hidden md:block relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsFilterPopoverOpen((open) => !open)}
+              title="Filtros"
+              aria-label="Filtros"
+              aria-expanded={isFilterPopoverOpen}
+              aria-haspopup="dialog"
+              className={`w-11 h-ctl rounded-ctl border flex items-center justify-center relative transition-colors focus-ring cursor-pointer ${
+                isFilterPopoverOpen || sheetFilterCount > 0
+                  ? "bg-primary-soft border-primary/40 text-primary"
+                  : "bg-surface-alt border-border hover:border-border-strong text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              <FilterIcon className="w-4 h-4" />
+              {sheetFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-bold inline-flex items-center justify-center tnum border-2 border-surface">
+                  {sheetFilterCount}
+                </span>
+              )}
+            </button>
+
+            {isFilterPopoverOpen && (
+              <div
+                role="dialog"
+                aria-label="Filtros"
+                className="absolute right-0 mt-2 w-[360px] rounded-card bg-surface p-4 shadow-sh3 border border-border anim-fade-down z-50 flex flex-col gap-4"
+              >
+                {filterFields}
+                <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/60">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearSelectFilters}
+                    disabled={sheetFilterCount === 0}
+                  >
+                    Limpar
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setIsFilterPopoverOpen(false)}
+                  >
+                    Ver resultados
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           <Button
@@ -391,24 +490,6 @@ export function TransactionsPage() {
               </span>
             )}
           </Button>
-        </div>
-
-        {/* Período e valor — segunda linha no desktop, folha no mobile. */}
-        <div className="hidden md:flex items-end gap-4 flex-wrap">
-          <Field
-            label="Período"
-            className="w-[320px]"
-            error={dateRangeInvalid ? "A data inicial vem depois da final." : undefined}
-          >
-            {dateRangeFields}
-          </Field>
-          <Field
-            label="Faixa de valor"
-            className="w-[320px]"
-            error={amountRangeInvalid ? "O valor mínimo é maior que o máximo." : undefined}
-          >
-            {amountRangeFields}
-          </Field>
         </div>
 
         {/* Chips de Filtros Ativos */}
@@ -621,7 +702,7 @@ export function TransactionsPage() {
                           }`}
                         >
                           {tx.type === "INCOME" ? "+ " : "- "}
-                          {formatCurrency(tx.amount)}
+                          <Money value={tx.amount} />
                         </span>
                       </div>
                     </button>
@@ -709,7 +790,7 @@ export function TransactionsPage() {
                           }`}
                         >
                           {tx.type === "INCOME" ? "+ " : "- "}
-                          {formatCurrency(tx.amount)}
+                          <Money value={tx.amount} />
                         </td>
                       </tr>
                     );
@@ -744,23 +825,7 @@ export function TransactionsPage() {
           </>
         }
       >
-        <div className="flex flex-col gap-4">
-          <Field label="Conta">{accountSelect}</Field>
-          <Field label="Tipo">{typeSelect}</Field>
-          <Field label="Categoria">{categorySelect}</Field>
-          <Field
-            label="Período"
-            error={dateRangeInvalid ? "A data inicial vem depois da final." : undefined}
-          >
-            {dateRangeFields}
-          </Field>
-          <Field
-            label="Faixa de valor"
-            error={amountRangeInvalid ? "O valor mínimo é maior que o máximo." : undefined}
-          >
-            {amountRangeFields}
-          </Field>
-        </div>
+        {filterFields}
       </Modal>
 
       {/* Modal Detalhe de Transação */}

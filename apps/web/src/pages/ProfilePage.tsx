@@ -7,6 +7,7 @@ import {
   fetchPluggyCredentials,
   syncItem,
   deleteItem,
+  updateAccount,
   clearToken,
 } from "../lib/api";
 import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
@@ -24,12 +25,15 @@ import {
   DownloadIcon,
   ShareIcon,
   CheckIcon,
+  EyeIcon,
+  EyeOffIcon,
 } from "../components/icons/Icons";
 import { useInstallState } from "../hooks/usePwa";
 import { promptInstall } from "../lib/pwa";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
+import { Money } from "../components/ui/Money";
 import { InstitutionLogo } from "../components/ui/InstitutionLogo";
 import { UserAvatar } from "../components/ui/UserAvatar";
 import { EditProfileModal } from "../components/profile/EditProfileModal";
@@ -40,7 +44,7 @@ import { PluggyCredentialsModal } from "../components/profile/PluggyCredentialsM
 import { AddConnectionModal } from "../components/profile/AddConnectionModal";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
-import { formatCurrency, formatDateTime } from "../lib/format";
+import { formatDateTime } from "../lib/format";
 
 export function ProfilePage({
   user,
@@ -56,6 +60,7 @@ export function ProfilePage({
   const [credentials, setCredentials] = useState<PluggyCredentialsDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [togglingAccountId, setTogglingAccountId] = useState<string | null>(null);
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -138,6 +143,28 @@ export function ProfilePage({
       await loadData();
     } catch (err: any) {
       toast.error(err.message || "Não foi possível desconectar a instituição.");
+    }
+  }
+
+  /** Tirar a conta do saldo é reversível e sem consequência para os dados: vale
+   *  um clique direto, sem confirmação, com a lista atualizada no lugar. */
+  async function handleToggleAccountBalance(account: AccountDTO) {
+    const excluir = !account.excludedFromBalance;
+    try {
+      setTogglingAccountId(account.id);
+      const atualizada = await updateAccount(account.id, { excludedFromBalance: excluir });
+      setAccounts((atuais) =>
+        atuais.map((a) => (a.id === atualizada.id ? atualizada : a))
+      );
+      toast.success(
+        excluir
+          ? `${atualizada.name} não entra mais no saldo.`
+          : `${atualizada.name} voltou a somar no saldo.`
+      );
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível atualizar a conta.");
+    } finally {
+      setTogglingAccountId(null);
     }
   }
 
@@ -507,25 +534,66 @@ export function ProfilePage({
                         {itemAccounts.map((acc) => (
                           <div
                             key={acc.id}
-                            className="p-3 rounded-tile bg-surface border border-border flex flex-col gap-1 shadow-sh1 group"
+                            className={`p-3 rounded-tile bg-surface border flex flex-col gap-1 shadow-sh1 group transition-colors ${
+                              acc.excludedFromBalance
+                                ? "border-dashed border-border-strong"
+                                : "border-border"
+                            }`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="font-semibold text-xs text-text-primary truncate">
                                 {acc.name}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => setRenamingAccount(acc)}
-                                title="Renomear conta"
-                                aria-label={`Renomear a conta ${acc.name}`}
-                                className="tap-target text-text-disabled hover:text-primary transition-colors rounded-ctl focus-ring cursor-pointer shrink-0"
-                              >
-                                <EditIcon className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                {/* Fora do saldo: a conta continua aqui, com o
+                                    saldo à vista — o que ela deixa de fazer é
+                                    entrar nos totais do Dashboard. */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAccountBalance(acc)}
+                                  disabled={togglingAccountId === acc.id}
+                                  title={
+                                    acc.excludedFromBalance
+                                      ? "Voltar a somar no saldo"
+                                      : "Não somar no saldo"
+                                  }
+                                  aria-label={
+                                    acc.excludedFromBalance
+                                      ? `Voltar a somar a conta ${acc.name} no saldo`
+                                      : `Não somar a conta ${acc.name} no saldo`
+                                  }
+                                  aria-pressed={acc.excludedFromBalance}
+                                  className="tap-target text-text-disabled hover:text-primary transition-colors rounded-ctl focus-ring cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                                >
+                                  {acc.excludedFromBalance ? (
+                                    <EyeOffIcon className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <EyeIcon className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRenamingAccount(acc)}
+                                  title="Renomear conta"
+                                  aria-label={`Renomear a conta ${acc.name}`}
+                                  className="tap-target text-text-disabled hover:text-primary transition-colors rounded-ctl focus-ring cursor-pointer"
+                                >
+                                  <EditIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                            <span className="font-display font-bold text-sm text-primary tnum">
-                              {formatCurrency(acc.balance)}
+                            <span
+                              className={`font-display font-bold text-sm tnum ${
+                                acc.excludedFromBalance ? "text-text-disabled" : "text-primary"
+                              }`}
+                            >
+                              <Money value={acc.balance} />
                             </span>
+                            {acc.excludedFromBalance && (
+                              <span className="text-[10px] text-text-secondary">
+                                Fora do saldo
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>

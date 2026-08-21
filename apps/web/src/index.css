@@ -371,6 +371,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Modo discreto: o olho do topo liga `data-privacy` no `<html>` e todo valor em
+   dinheiro (o componente `Money`) sai borrado — inclusive os rótulos em SVG do
+   gráfico. O `em` faz o borrão acompanhar o tamanho do texto: um saldo grande
+   precisa de mais desfoque que uma linha de lista para ficar igualmente ilegível.
+   `select-none` fecha a brecha óbvia de selecionar e ler o valor copiado. */
+html[data-privacy="on"] .money {
+  filter: blur(0.35em);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Quem prefere menos movimento não perde a proteção, só a transição. */
+@media (prefers-reduced-motion: no-preference) {
+  .money {
+    transition: filter 150ms ease;
+  }
+}
+
 /* O preflight do Tailwind define `border-color: #e5e7eb` em todos os elementos.
    Ancoramos esse padrão no token do tema para que nenhuma borda escape em branco. */
 *, *::before, *::after {

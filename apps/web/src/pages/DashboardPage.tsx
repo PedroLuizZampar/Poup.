@@ -38,6 +38,7 @@ import { useCurrentUser } from "../hooks/useCurrentUser";
 import { summarizeAccounts } from "../lib/accounts";
 import { formatCurrency, formatDate } from "../lib/format";
 import { formatMonthShort } from "../lib/date";
+import { Money } from "../components/ui/Money";
 
 /** Quantas transações a lista "Últimas transações" mostra. */
 const RECENT_TRANSACTIONS_LIMIT = 5;
@@ -236,12 +237,12 @@ export function DashboardPage() {
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-income shrink-0" />
                 Receitas em {month.shortName}
-                <span className="tnum text-text-primary font-semibold">{incomeText}</span>
+                <span className="tnum text-text-primary font-semibold money">{incomeText}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-expense shrink-0" />
                 Despesas em {month.shortName}
-                <span className="tnum text-text-primary font-semibold">{expenseText}</span>
+                <span className="tnum text-text-primary font-semibold money">{expenseText}</span>
               </div>
             </div>
           </Card>
@@ -293,7 +294,7 @@ export function DashboardPage() {
                         }`}
                       >
                         {tx.type === "INCOME" ? "+ " : "- "}
-                        {formatCurrency(tx.amount)}
+                        <Money value={tx.amount} />
                       </span>
                     </div>
                   );
@@ -344,7 +345,7 @@ export function DashboardPage() {
                         acc.type === "CREDIT" ? "text-expense" : "text-text-primary"
                       }`}
                     >
-                      {formatCurrency(acc.balance)}
+                      <Money value={acc.balance} />
                     </span>
                   </div>
                 ))}
@@ -396,14 +397,18 @@ export function DashboardPage() {
                         </p>
                         <p className="text-xs text-text-secondary tnum mt-0.5">
                           <span className="font-semibold text-text-primary">
-                            {formatCurrency(g.currentAmount)}
+                            <Money value={g.currentAmount} />
                           </span>{" "}
-                          de {formatCurrency(g.targetAmount)}
+                          de <Money value={g.targetAmount} />
                         </p>
                         <p className="text-[11px] text-text-secondary tnum mt-0.5">
-                          {complete
-                            ? "Meta alcançada"
-                            : `Faltam ${formatCurrency(g.remainingAmount)}`}
+                          {complete ? (
+                            "Meta alcançada"
+                          ) : (
+                            <>
+                              Faltam <Money value={g.remainingAmount} />
+                            </>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -442,7 +447,7 @@ export function DashboardPage() {
                             : "text-text-secondary"
                         }`}
                       >
-                        {formatCurrency(b.spent)} / {formatCurrency(b.monthlyLimit)}
+                        <Money value={b.spent} /> / <Money value={b.monthlyLimit} />
                       </span>
                     </div>
                     <ProgressBar

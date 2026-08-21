@@ -55,8 +55,16 @@ Poup/
 17. Erros como classes com status próprio + middleware único de tratamento
 18. Categorização sugerida: o sync deixa de aplicar categoria e passa a gravar
     sugestões pendentes (`CategorySuggestion`); toda transação nasce numa das
-    três categorias de sistema (`Category.systemKey`), que não aparecem em
-    seletores nem aceitam orçamento
+    **duas** categorias de sistema (`Category.systemKey`) — "Transferência entre
+    contas" e "Sem categoria" —, que não aparecem em seletores nem aceitam
+    orçamento. "Sem categoria" já foi duas, uma por tipo ("Sem categoria
+    (despesa)" e "(receita)"), o que não era decisão de ninguém e vazava o nome
+    interno em toda tela que lia `category.name` sem passar por
+    `displayCategory`. Marcar "Sem categoria" à mão, ou lançar uma transação
+    manual sem escolher categoria, **devolve a transação à fila de revisão**
+    (`reopenPendingSuggestion`): entra como `NONE` com `guessRejected`, na página
+    de escolha manual, para que a reavaliação do próximo lote não devolva o
+    palpite que acabou de ser recusado
 19. Transferência entre contas do próprio usuário detectada por valor + data +
     contas (`src/lib/categorization/transfers.ts`), com as duas pontas fora dos
     relatórios; cobre o caso da poupança, em que as duas pontas têm o mesmo sinal
@@ -68,14 +76,24 @@ Poup/
 22. Design system: tokens do protótipo → Tailwind config, com tema claro/escuro
 23. Onboarding (por usuário, depois do login)
 24. Dashboard
-25. Transações + modal de detalhe/categorização
+25. Transações + modal de detalhe/categorização. Os filtros vivem atrás de um
+    botão só nos dois tamanhos: folha no rodapé abaixo de `md`, popover ancorado
+    ao ícone acima — os mesmos cinco campos (`filterFields`), e os chips de
+    filtros ativos como única indicação inline
 26. Planejamento: abas de orçamentos e metas
 27. Relatórios (distribuição por categoria, por período)
 28. Categorias (criar, editar, excluir, com gasto do mês)
-29. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro)
+29. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro).
+    Cada conta vinculada tem um olho que a tira dos cards de saldo do Dashboard
+    (`Account.excludedFromBalance`) — preferência de exibição, e só: as
+    transações dela continuam valendo em relatórios e orçamentos
 30. Skeletons de carregamento, estados vazios, toasts e diálogos de confirmação
 31. Painel de notificações, com item clicável quando a notificação leva a uma rota
-32. Tela de revisão (`/revisao`), **em lote, uma categoria por página**,
+32. Modo discreto: o olho na topbar (nos dois tamanhos — é na rua que ele serve)
+    liga `data-privacy` no `<html>`, e uma regra de CSS borra todo valor em
+    dinheiro. A marca é o componente `Money`, por onde passa todo valor visível;
+    a preferência persiste em `localStorage`
+33. Tela de revisão (`/revisao`), **em lote, uma categoria por página**,
     alcançável pela notificação e pelo botão "Sugestões" com contador no
     Dashboard e em Transações. A fila é **toda transação sem categoria**, e não
     só a que o app adivinhou: quem não recebeu palpite entra como
@@ -93,26 +111,26 @@ Poup/
     dispensa as que não quer decidir
 
 ### Mobile
-33. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
+34. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
     ela nenhuma rota era alcançável no celular a não ser digitando a URL
-34. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
+35. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
     toque, e a tabela de transações vira lista de cards
-35. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
+36. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
     alvos de toque de 44px via `.tap-target`, `dvh` no lugar de `vh`
-36. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
+37. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
 
 ### PWA
-37. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
+38. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
     ícones) e **`NetworkOnly` para `/api/*`** — saldo servido do cache sem aviso
     é pior que tela vazia
-38. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
+39. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
     partir do `Logo.tsx`
-39. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
+40. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
     render-block do CDN do Google e entra fonte precacheável
-40. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
+41. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
     manuais do iOS quando não há prompt; banner de versão nova em vez de recarga
     automática
-41. Tela de sem conexão honesta, e sessão preservada quando o servidor não
+42. Tela de sem conexão honesta, e sessão preservada quando o servidor não
     responde — falha de rede deixou de ser tratada como sessão expirada
 
 ## Backlog (planejado, **não** implementado)
@@ -131,9 +149,12 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 
 Outros pendentes conhecidos:
 
-- **Teste automatizado só na lib de categorização.** `npm run test --workspace=apps/api`
-  cobre normalização, similaridade, pareamento de transferência e o motor de
-  palpite. Rotas, pipeline e telas seguem verificados à mão.
+- **Teste automatizado quase só na lib de categorização.**
+  `npm run test --workspace=apps/api` cobre normalização, similaridade,
+  pareamento de transferência, o motor de palpite e o formato da linha que volta
+  para a fila (`reopenPendingSuggestion`);
+  `npm run test --workspace=apps/web` cobre `summarizeAccounts`, inclusive as
+  contas fora do saldo. Rotas, pipeline e telas seguem verificados à mão.
 - **Dois sistemas de ícone** convivem: `Icons.tsx` (feito à mão) e `lucide-react` (usado por `categoryIcons.tsx`).
 - **Dinheiro trafega como `number`** nos DTOs. Os agregados já são somados no banco; o que resta é a exibição.
 
