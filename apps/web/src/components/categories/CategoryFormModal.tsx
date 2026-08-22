@@ -1,10 +1,11 @@
 import React, { useState, useEffect, FormEvent } from "react";
-import type { CategoryDTO } from "@poup/shared";
+import type { CategoryDTO, CategoryKind } from "@poup/shared";
 import { Modal } from "../ui/Modal";
 import { Field } from "../ui/Field";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { CategoryTile, normalizeColorKey } from "../ui/CategoryTile";
+import { CategoryTile, normalizeColorKey, DEFAULT_COLOR_KEY } from "../ui/CategoryTile";
+import { Badge } from "../ui/Badge";
 import { ColorPicker } from "./ColorPicker";
 import { IconPicker } from "./IconPicker";
 import { useToast } from "../ui/Toast";
@@ -15,10 +16,31 @@ export interface CategoryFormModalProps {
   categoryToEdit?: CategoryDTO | null;
   existingCategories: CategoryDTO[];
   onSaved: (saved: CategoryDTO) => void;
-  onSaveCategory: (data: { name: string; icon: string; colorKey: string }, id?: string) => Promise<CategoryDTO>;
+  onSaveCategory: (
+    data: { name: string; icon: string; colorKey: string; kind: CategoryKind },
+    id?: string
+  ) => Promise<CategoryDTO>;
 }
 
 const NAME_MAX = 24;
+
+/**
+ * Fixa ou variável. Os dois estados são nomeados em vez de um interruptor
+ * "é fixa?" porque nenhum dos dois é a ausência do outro — "variável" é uma
+ * escolha tão afirmativa quanto "fixa", e um switch desligado não diz isso.
+ */
+const KIND_OPTIONS: Array<{ value: CategoryKind; label: string; hint: string }> = [
+  {
+    value: "VARIABLE",
+    label: "Variável",
+    hint: "Muda de mês para mês, e depende do que você decidir gastar.",
+  },
+  {
+    value: "FIXED",
+    label: "Fixa",
+    hint: "Repete todo mês com o mesmo valor: aluguel, mensalidade, assinatura.",
+  },
+];
 
 export function CategoryFormModal({
   isOpen,
@@ -30,7 +52,8 @@ export function CategoryFormModal({
 }: CategoryFormModalProps) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("cart");
-  const [colorKey, setColorKey] = useState("1");
+  const [colorKey, setColorKey] = useState<string>(DEFAULT_COLOR_KEY);
+  const [kind, setKind] = useState<CategoryKind>("VARIABLE");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -39,11 +62,13 @@ export function CategoryFormModal({
     if (categoryToEdit) {
       setName(categoryToEdit.name);
       setIcon(categoryToEdit.icon || "folder");
-      setColorKey(categoryToEdit.colorKey || "1");
+      setColorKey(categoryToEdit.colorKey || DEFAULT_COLOR_KEY);
+      setKind(categoryToEdit.kind ?? "VARIABLE");
     } else {
       setName("");
       setIcon("cart");
-      setColorKey("1");
+      setColorKey(DEFAULT_COLOR_KEY);
+      setKind("VARIABLE");
     }
     setError(null);
   }, [categoryToEdit, isOpen]);
@@ -73,7 +98,7 @@ export function CategoryFormModal({
     try {
       setLoading(true);
       setError(null);
-      const saved = await onSaveCategory({ name: trimmed, icon, colorKey }, categoryToEdit?.id);
+      const saved = await onSaveCategory({ name: trimmed, icon, colorKey, kind }, categoryToEdit?.id);
       toast.success(
         categoryToEdit ? "Categoria atualizada." : "Categoria criada."
       );
@@ -88,6 +113,7 @@ export function CategoryFormModal({
 
   const displayName = name.trim();
   const normalizedKey = normalizeColorKey(colorKey);
+  const selectedKind = KIND_OPTIONS.find((option) => option.value === kind)!;
 
   return (
     <Modal
@@ -125,7 +151,12 @@ export function CategoryFormModal({
               Assim ela vai aparecer nas suas transações
             </p>
           </div>
-          <span className="text-num text-expense tnum shrink-0">− R$ 128,90</span>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Badge variant={kind === "FIXED" ? "info" : "neutral"} size="sm">
+              {selectedKind.label}
+            </Badge>
+            <span className="text-num text-expense tnum">− R$ 128,90</span>
+          </div>
         </div>
 
         {/* Duas colunas a partir de md: identidade à esquerda, ícone à direita.
@@ -148,10 +179,40 @@ export function CategoryFormModal({
             </Field>
 
             <div className="flex flex-col gap-2 min-w-0">
+              <span className="text-label text-text-secondary select-none">Tipo de gasto</span>
+              <div
+                role="radiogroup"
+                aria-label="Tipo de gasto"
+                className="grid grid-cols-2 gap-1.5 p-1 rounded-ctl bg-surface-alt/60 border border-border"
+              >
+                {KIND_OPTIONS.map((option) => {
+                  const isSelected = option.value === kind;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => setKind(option.value)}
+                      className={`min-h-ctl-sm rounded-tile px-3 text-label transition-colors focus-ring cursor-pointer ${
+                        isSelected
+                          ? "bg-surface text-text-primary shadow-sh1"
+                          : "text-text-secondary hover:text-text-primary"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-caption text-text-secondary">{selectedKind.hint}</p>
+            </div>
+
+            <div className="flex flex-col gap-2 min-w-0">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-label text-text-secondary select-none">Cor</span>
               </div>
-              <div className="p-2 rounded-card bg-surface-alt/50 border border-border max-w-[312px]">
+              <div className="p-2 rounded-card bg-surface-alt/50 border border-border max-w-[360px]">
                 <ColorPicker value={colorKey} onChange={setColorKey} />
               </div>
             </div>

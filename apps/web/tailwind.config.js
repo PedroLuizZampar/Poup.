@@ -4,7 +4,7 @@ const plugin = require("tailwindcss/plugin");
 module.exports = {
   darkMode: "class",
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
-  safelist: [{ pattern: /^(bg|text|border)-cat-([1-9]|1[0-9]|2[0-4])-(bg|fg)$/ }],
+  safelist: [{ pattern: /^(bg|text|border)-cat-([1-9]|1[0-6])-(bg|fg)$/ }],
   theme: {
     extend: {
       colors: {
@@ -83,22 +83,6 @@ module.exports = {
           "15-fg": "color-mix(in srgb, var(--cat-15-fg) calc(<alpha-value> * 100%), transparent)",
           "16-bg": "color-mix(in srgb, var(--cat-16-bg) calc(<alpha-value> * 100%), transparent)",
           "16-fg": "color-mix(in srgb, var(--cat-16-fg) calc(<alpha-value> * 100%), transparent)",
-          "17-bg": "color-mix(in srgb, var(--cat-17-bg) calc(<alpha-value> * 100%), transparent)",
-          "17-fg": "color-mix(in srgb, var(--cat-17-fg) calc(<alpha-value> * 100%), transparent)",
-          "18-bg": "color-mix(in srgb, var(--cat-18-bg) calc(<alpha-value> * 100%), transparent)",
-          "18-fg": "color-mix(in srgb, var(--cat-18-fg) calc(<alpha-value> * 100%), transparent)",
-          "19-bg": "color-mix(in srgb, var(--cat-19-bg) calc(<alpha-value> * 100%), transparent)",
-          "19-fg": "color-mix(in srgb, var(--cat-19-fg) calc(<alpha-value> * 100%), transparent)",
-          "20-bg": "color-mix(in srgb, var(--cat-20-bg) calc(<alpha-value> * 100%), transparent)",
-          "20-fg": "color-mix(in srgb, var(--cat-20-fg) calc(<alpha-value> * 100%), transparent)",
-          "21-bg": "color-mix(in srgb, var(--cat-21-bg) calc(<alpha-value> * 100%), transparent)",
-          "21-fg": "color-mix(in srgb, var(--cat-21-fg) calc(<alpha-value> * 100%), transparent)",
-          "22-bg": "color-mix(in srgb, var(--cat-22-bg) calc(<alpha-value> * 100%), transparent)",
-          "22-fg": "color-mix(in srgb, var(--cat-22-fg) calc(<alpha-value> * 100%), transparent)",
-          "23-bg": "color-mix(in srgb, var(--cat-23-bg) calc(<alpha-value> * 100%), transparent)",
-          "23-fg": "color-mix(in srgb, var(--cat-23-fg) calc(<alpha-value> * 100%), transparent)",
-          "24-bg": "color-mix(in srgb, var(--cat-24-bg) calc(<alpha-value> * 100%), transparent)",
-          "24-fg": "color-mix(in srgb, var(--cat-24-fg) calc(<alpha-value> * 100%), transparent)",
         },
       },
       borderRadius: {

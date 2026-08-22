@@ -15,13 +15,13 @@ export const SYSTEM_CATEGORY_DEFS = [
     systemKey: SystemCategoryKey.TRANSFER,
     name: "Transferência entre contas",
     icon: "repeat",
-    colorKey: "5",
+    colorKey: "13",
   },
   {
     systemKey: SystemCategoryKey.UNCATEGORIZED,
     name: "Sem categoria",
     icon: "dots",
-    colorKey: "5",
+    colorKey: "13",
   },
 ] as const;
 

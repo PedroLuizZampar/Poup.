@@ -15,16 +15,20 @@ export const categoriesRouter = Router();
 
 categoriesRouter.use(requireAuth);
 
+const categoryKindSchema = z.enum(["FIXED", "VARIABLE"]);
+
 const createCategorySchema = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório"),
   icon: z.string().trim().min(1).optional(),
   colorKey: z.string().trim().min(1).optional(),
+  kind: categoryKindSchema.optional(),
 });
 
 const updateCategorySchema = z.object({
   name: z.string().trim().min(1).optional(),
   icon: z.string().trim().min(1).optional(),
   colorKey: z.string().trim().min(1).optional(),
+  kind: categoryKindSchema.optional(),
 });
 
 categoriesRouter.get(

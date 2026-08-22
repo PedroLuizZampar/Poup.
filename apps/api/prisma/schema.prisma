@@ -38,6 +38,16 @@ enum SystemCategoryKey {
   UNCATEGORIZED
 }
 
+/// Fixa ou variavel. Fixa e o que se repete com o mesmo valor todo mes e nao
+/// muda por decisao do dia: aluguel, mensalidade, assinatura. Variavel e o
+/// resto. A distincao vive na categoria, e nao na transacao, porque e assim
+/// que a pessoa pensa nela — "Moradia e fixa" — e porque o relatorio precisa
+/// somar os dois grupos sem depender de a transacao ter sido marcada a mao.
+enum CategoryKind {
+  FIXED
+  VARIABLE
+}
+
 enum SuggestionSource {
   HISTORY
   RULE
@@ -137,6 +147,9 @@ model Category {
   name      String
   icon      String
   colorKey  String
+  /// Despesa fixa ou variavel. Toda categoria tem uma, inclusive as de receita:
+  /// nao ha tipo na categoria, entao quem decide o que e fixo e o usuario.
+  kind      CategoryKind @default(VARIABLE)
   /// Marca as categorias que o app cria e mantém. Não aparecem em seletores,
   /// não podem ser renomeadas nem excluídas, e não aceitam orçamento. Existem
   /// para que nenhuma transação precise ficar com `categoryId` nulo.

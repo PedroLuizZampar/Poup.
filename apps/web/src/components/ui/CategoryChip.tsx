@@ -21,14 +21,6 @@ const DOT_CLASSES: Record<string, string> = {
   "14": "bg-cat-14-fg",
   "15": "bg-cat-15-fg",
   "16": "bg-cat-16-fg",
-  "17": "bg-cat-17-fg",
-  "18": "bg-cat-18-fg",
-  "19": "bg-cat-19-fg",
-  "20": "bg-cat-20-fg",
-  "21": "bg-cat-21-fg",
-  "22": "bg-cat-22-fg",
-  "23": "bg-cat-23-fg",
-  "24": "bg-cat-24-fg",
 };
 
 const SKIN_CLASSES: Record<string, string> = {
@@ -48,14 +40,6 @@ const SKIN_CLASSES: Record<string, string> = {
   "14": "bg-cat-14-bg/40 text-cat-14-fg border-cat-14-fg/25",
   "15": "bg-cat-15-bg/40 text-cat-15-fg border-cat-15-fg/25",
   "16": "bg-cat-16-bg/40 text-cat-16-fg border-cat-16-fg/25",
-  "17": "bg-cat-17-bg/40 text-cat-17-fg border-cat-17-fg/25",
-  "18": "bg-cat-18-bg/40 text-cat-18-fg border-cat-18-fg/25",
-  "19": "bg-cat-19-bg/40 text-cat-19-fg border-cat-19-fg/25",
-  "20": "bg-cat-20-bg/40 text-cat-20-fg border-cat-20-fg/25",
-  "21": "bg-cat-21-bg/40 text-cat-21-fg border-cat-21-fg/25",
-  "22": "bg-cat-22-bg/40 text-cat-22-fg border-cat-22-fg/25",
-  "23": "bg-cat-23-bg/40 text-cat-23-fg border-cat-23-fg/25",
-  "24": "bg-cat-24-bg/40 text-cat-24-fg border-cat-24-fg/25",
 };
 
 export interface CategoryChipProps {

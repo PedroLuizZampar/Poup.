@@ -26,8 +26,10 @@ Poup/
 │   └── web/            # React + Vite (PWA)
 ├── packages/
 │   └── shared/         # Tipos TS compartilhados entre api e web
-├── docs/               # Revisões e notas de design
-└── PLAN.md
+└── docs/               # Este plano, revisões, notas de design e o histórico
+    ├── PLAN.md         # Este arquivo
+    ├── historico/      # Planos de fases já concluídas
+    └── superpowers/    # Specs e planos de implementação por feature
 ```
 
 ## O que está pronto
@@ -73,7 +75,13 @@ Poup/
 
 ### Frontend
 21. App React + Vite: roteamento e layout base
-22. Design system: tokens do protótipo → Tailwind config, com tema claro/escuro
+22. Design system: tokens do protótipo → Tailwind config, com tema claro/escuro.
+    A paleta de categorias tem **16 cores** na ordem do círculo cromático (1
+    vermelho → 13 carmim, depois café, sálvia e grafite). Eram 24, e metade não
+    passava no teste que importa — duas categorias vizinhas numa lista: o par
+    mais próximo estava a ΔE 8,6 (grafite e ardósia, indistinguíveis). Agora o
+    mínimo é 14,4. A migração `20260822120000` traduz as chaves gravadas, que
+    são posicionais
 23. Onboarding (por usuário, depois do login)
 24. Dashboard
 25. Transações + modal de detalhe/categorização. Os filtros vivem atrás de um
@@ -81,8 +89,16 @@ Poup/
     ao ícone acima — os mesmos cinco campos (`filterFields`), e os chips de
     filtros ativos como única indicação inline
 26. Planejamento: abas de orçamentos e metas
-27. Relatórios (distribuição por categoria, por período)
-28. Categorias (criar, editar, excluir, com gasto do mês)
+27. Relatórios: **fixas × variáveis** em cima — uma barra dividida e os dois
+    totais, "quanto do mês já estava decidido antes de ele começar" — e a
+    distribuição por categoria embaixo, agrupada pelos mesmos dois grupos. O
+    corte sai da categoria e é derivado na hora da leitura, então reclassificar
+    uma categoria corrige o histórico inteiro sem varrer transação por transação
+28. Categorias (criar, editar, excluir, com gasto do mês). Cada uma declara se é
+    **fixa ou variável** (`Category.kind`), num par de botões nomeados no modal —
+    "variável" é uma escolha tão afirmativa quanto "fixa", e um interruptor
+    desligado não diz isso. Toda categoria pode ser marcada, inclusive as de
+    receita: não há tipo na categoria, então quem decide é o usuário
 29. Perfil: conexões Pluggy, credenciais, foto, senha e aparência (claro/escuro).
     Cada conta vinculada tem um olho que a tira dos cards de saldo do Dashboard
     (`Account.excludedFromBalance`) — preferência de exibição, e só: as

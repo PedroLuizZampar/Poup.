@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import type { CategoryDTO, TransactionDTO, BudgetDTO } from "@poup/shared";
+import type { CategoryDTO, CategoryKind, TransactionDTO, BudgetDTO } from "@poup/shared";
 import {
   fetchCategories,
   createCategory,
@@ -11,6 +11,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { Select } from "../components/ui/Select";
 import { CategoryTile } from "../components/ui/CategoryTile";
+import { Badge } from "../components/ui/Badge";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { CategoryFormModal } from "../components/categories/CategoryFormModal";
 import { EmptyState } from "../components/common/EmptyState";
@@ -29,7 +30,7 @@ export function CategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [sortBy, setSortBy] = useState<"spent" | "name" | "count" | "created">("spent");
+  const [sortBy, setSortBy] = useState<"spent" | "name" | "count" | "kind" | "created">("spent");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryDTO | null>(null);
 
@@ -109,6 +110,13 @@ export function CategoriesPage() {
         return list.sort(
           (a, b) => (categoryStats[b.id]?.txCount || 0) - (categoryStats[a.id]?.txCount || 0)
         );
+      case "kind":
+        // Dentro de cada grupo, o nome — senão a ordem entre as fixas fica à
+        // mercê de como o servidor devolveu a lista.
+        return list.sort((a, b) => {
+          if (a.kind !== b.kind) return a.kind === "FIXED" ? -1 : 1;
+          return a.name.localeCompare(b.name, "pt-BR");
+        });
       case "name":
         return list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       case "created":
@@ -119,6 +127,7 @@ export function CategoriesPage() {
 
   // Métricas do resumo
   const totalCategories = categories.length;
+  const fixedCategories = categories.filter((c) => c.kind === "FIXED").length;
   const categoriesWithSpending = Object.values(categoryStats).filter((s) => s.spent > 0).length;
   const unusedCategories = Object.values(categoryStats).filter((s) => s.txCount === 0).length;
   const topSpendingCategory = useMemo<{ name: string; spent: number } | null>(() => {
@@ -169,7 +178,7 @@ export function CategoriesPage() {
   }
 
   async function handleSaveCategory(
-    data: { name: string; icon: string; colorKey: string },
+    data: { name: string; icon: string; colorKey: string; kind: CategoryKind },
     id?: string
   ): Promise<CategoryDTO> {
     if (id) {
@@ -197,7 +206,9 @@ export function CategoriesPage() {
             Categorias
           </h1>
           <p className="text-xs md:text-sm text-text-secondary mt-1">
-            {totalCategories} categorias · {unusedCategories} sem movimentação este mês
+            {totalCategories} categorias · {fixedCategories}{" "}
+            {fixedCategories === 1 ? "fixa" : "fixas"} · {unusedCategories} sem movimentação
+            este mês
           </p>
         </div>
 
@@ -269,6 +280,7 @@ export function CategoriesPage() {
             options={[
               { value: "spent", label: "Maior gasto" },
               { value: "count", label: "Mais usadas" },
+              { value: "kind", label: "Fixas primeiro" },
               { value: "name", label: "Nome (A-Z)" },
               { value: "created", label: "Ordem de criação" },
             ]}
@@ -344,8 +356,17 @@ export function CategoriesPage() {
                   >
                     <CategoryTile icon={cat.icon} colorKey={cat.colorKey} size="lg" />
                     <span className="min-w-0">
-                      <span className="block font-display font-bold text-sm md:text-base text-text-primary truncate">
-                        {cat.name}
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="font-display font-bold text-sm md:text-base text-text-primary truncate">
+                          {cat.name}
+                        </span>
+                        {/* Só a fixa se anuncia: variável é o estado de repouso,
+                            e um selo em cada card não distingue mais nada. */}
+                        {cat.kind === "FIXED" && (
+                          <Badge variant="info" size="sm" className="shrink-0">
+                            Fixa
+                          </Badge>
+                        )}
                       </span>
                       <span className="block text-xs text-text-secondary">
                         {txCount} {txCount === 1 ? "transação" : "transações"}

@@ -43,31 +43,28 @@
   --warning-soft: rgba(245,165,36,.12);
   --error-soft:   rgba(220,38,38,.10);
 
-  /* Categorias — 12 pares fundo/traço semânticos e variados */
-  --cat-1-bg: #CFEBDC;  --cat-1-fg: #1F7A54; /* Esmeralda / Verde */
-  --cat-2-bg: #DBEAFE;  --cat-2-fg: #2563EB; /* Azul Real */
-  --cat-3-bg: #EDE9FE;  --cat-3-fg: #7C3AED; /* Roxo */
-  --cat-4-bg: #FEF3C7;  --cat-4-fg: #B45309; /* Âmbar */
-  --cat-5-bg: #FFE4E6;  --cat-5-fg: #E11D48; /* Rose / Carmim */
-  --cat-6-bg: #CCFBF1;  --cat-6-fg: #0D9488; /* Teal / Turquesa */
-  --cat-7-bg: #E0E7FF;  --cat-7-fg: #4F46E5; /* Índigo */
-  --cat-8-bg: #FCE7F3;  --cat-8-fg: #DB2777; /* Pink / Magenta */
-  --cat-9-bg: #FFEDD5;  --cat-9-fg: #EA580C; /* Laranja */
-  --cat-10-bg: #CFFAFE; --cat-10-fg: #0891B2; /* Ciano */
-  --cat-11-bg: #ECFCCB; --cat-11-fg: #4D7C0F; /* Lima */
-  --cat-12-bg: #F1F5F9; --cat-12-fg: #475569; /* Cinza Grafite */
-  --cat-13-bg: #FEE2E2;  --cat-13-fg: #B91C1C; /* Vermelho */
-  --cat-14-bg: #FBE5D6;  --cat-14-fg: #9A3412; /* Terracota */
-  --cat-15-bg: #EDE3DA;  --cat-15-fg: #78543A; /* Café */
-  --cat-16-bg: #FBF0CE;  --cat-16-fg: #A16207; /* Mostarda */
-  --cat-17-bg: #E9EEC9;  --cat-17-fg: #646B26; /* Oliva */
-  --cat-18-bg: #D7EBDC;  --cat-18-fg: #15803D; /* Floresta */
-  --cat-19-bg: #DFE9E2;  --cat-19-fg: #4B7A63; /* Sálvia */
-  --cat-20-bg: #D5E6EA;  --cat-20-fg: #0E6E7E; /* Petróleo */
-  --cat-21-bg: #DCE3F3;  --cat-21-fg: #1E3A8A; /* Marinho */
-  --cat-22-bg: #E1E6EC;  --cat-22-fg: #334155; /* Ardósia */
-  --cat-23-bg: #ECDEE9;  --cat-23-fg: #86198F; /* Fúcsia */
-  --cat-24-bg: #F2DDE3;  --cat-24-fg: #9F1239; /* Vinho */
+  /* Categorias — 16 cores.
+     As treze primeiras dão uma volta completa no círculo cromático, do vermelho
+     ao carmim, sem que duas vizinhas se confundam numa lista. As três últimas
+     são os tons quebrados: café, sálvia e grafite, para o que não quer cor.
+     A paleta tinha 24 e metade eram variações da mesma cor — esmeralda,
+     floresta e sálvia disputando o mesmo verde. */
+  --cat-1-bg:  #FEE2E2; --cat-1-fg:  #B91C1C; /* Vermelho */
+  --cat-2-bg:  #FFEDD5; --cat-2-fg:  #EA580C; /* Laranja */
+  --cat-3-bg:  #FEF3C7; --cat-3-fg:  #B45309; /* Âmbar */
+  --cat-4-bg:  #ECFCCB; --cat-4-fg:  #4D7C0F; /* Lima */
+  --cat-5-bg:  #D7EBDC; --cat-5-fg:  #15803D; /* Verde */
+  --cat-6-bg:  #CCFBF1; --cat-6-fg:  #0D9488; /* Turquesa */
+  --cat-7-bg:  #CFFAFE; --cat-7-fg:  #0891B2; /* Ciano */
+  --cat-8-bg:  #DBEAFE; --cat-8-fg:  #2563EB; /* Azul */
+  --cat-9-bg:  #E0E7FF; --cat-9-fg:  #4F46E5; /* Índigo */
+  --cat-10-bg: #EDE9FE; --cat-10-fg: #7C3AED; /* Roxo */
+  --cat-11-bg: #ECDEE9; --cat-11-fg: #86198F; /* Fúcsia */
+  --cat-12-bg: #FCE7F3; --cat-12-fg: #DB2777; /* Pink */
+  --cat-13-bg: #FFE4E6; --cat-13-fg: #E11D48; /* Carmim */
+  --cat-14-bg: #EDE3DA; --cat-14-fg: #78543A; /* Café */
+  --cat-15-bg: #DFE9E2; --cat-15-fg: #4B7A63; /* Sálvia */
+  --cat-16-bg: #F1F5F9; --cat-16-fg: #475569; /* Grafite */
 
   /* Elevação */
   --sh1: 0 1px 2px rgba(0,0,0,.06);
@@ -140,31 +137,23 @@
   --warning-soft: rgba(247,184,75,.14);
   --error-soft:   rgba(248,113,113,.14);
 
-  /* Categorias */
-  --cat-1-bg: rgba(52,160,107,.18);  --cat-1-fg: #6FCF9B;
-  --cat-2-bg: rgba(59,130,246,.18);  --cat-2-fg: #93C5FD;
-  --cat-3-bg: rgba(139,92,246,.18);  --cat-3-fg: #C4B5FD;
-  --cat-4-bg: rgba(245,158,11,.18);  --cat-4-fg: #FCD34D;
-  --cat-5-bg: rgba(244,63,94,.18);   --cat-5-fg: #FDA4AF;
-  --cat-6-bg: rgba(20,184,166,.18);  --cat-6-fg: #5EEAD4;
-  --cat-7-bg: rgba(99,102,241,.18);  --cat-7-fg: #A5B4FC;
-  --cat-8-bg: rgba(236,72,153,.18);  --cat-8-fg: #F9A8D4;
-  --cat-9-bg: rgba(249,115,22,.18);  --cat-9-fg: #FDBA74;
-  --cat-10-bg: rgba(6,182,212,.18);  --cat-10-fg: #67E8F9;
-  --cat-11-bg: rgba(132,204,22,.18); --cat-11-fg: #BEF264;
-  --cat-12-bg: rgba(148,163,184,.18);--cat-12-fg: #CBD5E1;
-  --cat-13-bg: rgba(239,68,68,.18);   --cat-13-fg: #FCA5A5; /* Vermelho */
-  --cat-14-bg: rgba(194,65,12,.22);   --cat-14-fg: #F0A883; /* Terracota */
-  --cat-15-bg: rgba(146,110,80,.24);  --cat-15-fg: #D6B79A; /* Café */
-  --cat-16-bg: rgba(202,138,4,.20);   --cat-16-fg: #E8C45C; /* Mostarda */
-  --cat-17-bg: rgba(132,146,40,.24);  --cat-17-fg: #C3CE7A; /* Oliva */
-  --cat-18-bg: rgba(22,163,74,.18);   --cat-18-fg: #7BD69B; /* Floresta */
-  --cat-19-bg: rgba(94,140,116,.26);  --cat-19-fg: #A7C9B6; /* Sálvia */
-  --cat-20-bg: rgba(14,116,144,.22);  --cat-20-fg: #7FC5D6; /* Petróleo */
-  --cat-21-bg: rgba(37,60,160,.26);   --cat-21-fg: #A3B4E8; /* Marinho */
-  --cat-22-bg: rgba(100,116,139,.24); --cat-22-fg: #B3BECD; /* Ardósia */
-  --cat-23-bg: rgba(162,28,175,.20);  --cat-23-fg: #E9A6EE; /* Fúcsia */
-  --cat-24-bg: rgba(190,24,93,.20);   --cat-24-fg: #F2A0B8; /* Vinho */
+  /* Categorias — mesma ordem do claro: o traço clareia e o fundo vira um véu. */
+  --cat-1-bg:  rgba(239,68,68,.18);   --cat-1-fg:  #FCA5A5; /* Vermelho */
+  --cat-2-bg:  rgba(249,115,22,.18);  --cat-2-fg:  #FDBA74; /* Laranja */
+  --cat-3-bg:  rgba(245,158,11,.18);  --cat-3-fg:  #FCD34D; /* Âmbar */
+  --cat-4-bg:  rgba(132,204,22,.18);  --cat-4-fg:  #BEF264; /* Lima */
+  --cat-5-bg:  rgba(22,163,74,.18);   --cat-5-fg:  #7BD69B; /* Verde */
+  --cat-6-bg:  rgba(20,184,166,.18);  --cat-6-fg:  #5EEAD4; /* Turquesa */
+  --cat-7-bg:  rgba(6,182,212,.18);   --cat-7-fg:  #67E8F9; /* Ciano */
+  --cat-8-bg:  rgba(59,130,246,.18);  --cat-8-fg:  #93C5FD; /* Azul */
+  --cat-9-bg:  rgba(99,102,241,.18);  --cat-9-fg:  #A5B4FC; /* Índigo */
+  --cat-10-bg: rgba(139,92,246,.18);  --cat-10-fg: #C4B5FD; /* Roxo */
+  --cat-11-bg: rgba(162,28,175,.20);  --cat-11-fg: #E9A6EE; /* Fúcsia */
+  --cat-12-bg: rgba(236,72,153,.18);  --cat-12-fg: #F9A8D4; /* Pink */
+  --cat-13-bg: rgba(244,63,94,.18);   --cat-13-fg: #FDA4AF; /* Carmim */
+  --cat-14-bg: rgba(146,110,80,.24);  --cat-14-fg: #D6B79A; /* Café */
+  --cat-15-bg: rgba(94,140,116,.26);  --cat-15-fg: #A7C9B6; /* Sálvia */
+  --cat-16-bg: rgba(148,163,184,.18); --cat-16-fg: #CBD5E1; /* Grafite */
 
   --sh1: 0 1px 2px rgba(0,0,0,.40);
   --sh2: 0 4px 14px rgba(0,0,0,.45);

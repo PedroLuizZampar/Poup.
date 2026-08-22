@@ -4,11 +4,20 @@ export type BudgetStatus = "ok" | "warning" | "exceeded";
 
 export type SystemCategoryKey = "TRANSFER" | "UNCATEGORIZED";
 
+/**
+ * Fixa e o que se repete com o mesmo valor todo mes — aluguel, mensalidade,
+ * assinatura. Variavel e o resto. Vive na categoria, e nao na transacao: e
+ * assim que a pessoa pensa nela, e e o que deixa o relatorio somar os dois
+ * grupos sem depender de marcacao transacao a transacao.
+ */
+export type CategoryKind = "FIXED" | "VARIABLE";
+
 export interface CategoryDTO {
   id: string;
   name: string;
   icon: string;
   colorKey: string;
+  kind: CategoryKind;
   /** Preenchido nas categorias que o Poup mantém. Não aparecem em seletores. */
   systemKey: SystemCategoryKey | null;
 }
@@ -159,12 +168,14 @@ export interface CreateCategoryRequest {
   name: string;
   icon?: string;
   colorKey?: string;
+  kind?: CategoryKind;
 }
 
 export interface UpdateCategoryRequest {
   name?: string;
   icon?: string;
   colorKey?: string;
+  kind?: CategoryKind;
 }
 
 export interface CreateTransactionRequest {
@@ -266,10 +277,23 @@ export interface ReportCategoryTotalDTO {
   categoryName: string;
   categoryIcon: string | null;
   categoryColorKey: string | null;
+  /** Null so na linha agregada de cauda ("Outras categorias"). */
+  categoryKind: CategoryKind | null;
   amount: number;
   /** Fatia da despesa total do periodo, em pontos percentuais. */
   percentage: number;
   transactionCount: number;
+}
+
+/** Um dos dois lados de "quanto foi fixo, quanto foi variavel". */
+export interface ReportKindTotalDTO {
+  kind: CategoryKind;
+  amount: number;
+  /** Fatia da despesa total do periodo, em pontos percentuais. */
+  percentage: number;
+  transactionCount: number;
+  /** As categorias do grupo, da maior despesa para a menor. */
+  categories: ReportCategoryTotalDTO[];
 }
 
 export interface ReportMonthTotalDTO {
@@ -301,6 +325,11 @@ export interface ReportSummaryDTO {
   expenseCount: number;
   uncategorizedCount: number;
   byCategory: ReportCategoryTotalDTO[];
+  /** As mesmas despesas de `byCategory`, separadas em fixas e variaveis. */
+  byKind: {
+    fixed: ReportKindTotalDTO;
+    variable: ReportKindTotalDTO;
+  };
   /** Serie mensal do periodo, em ordem cronologica. */
   monthly: ReportMonthTotalDTO[];
 }

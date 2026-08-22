@@ -1,8 +1,9 @@
-import { Prisma, SystemCategoryKey } from "@prisma/client";
+import { CategoryKind, Prisma, SystemCategoryKey } from "@prisma/client";
 import { prisma } from "../../prisma";
 import { ensureSystemCategories } from "../../lib/systemCategories";
 import type {
   ReportCategoryTotalDTO,
+  ReportKindTotalDTO,
   ReportMonthTotalDTO,
   ReportPeriod,
   ReportSummaryDTO,
@@ -148,7 +149,7 @@ async function expensesByCategory(
 
   const categories = await prisma.category.findMany({
     where: { id: { in: categoryIds }, userId },
-    select: { id: true, name: true, icon: true, colorKey: true },
+    select: { id: true, name: true, icon: true, colorKey: true, kind: true },
   });
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
@@ -161,12 +162,45 @@ async function expensesByCategory(
         categoryName: category?.name ?? "Sem categoria",
         categoryIcon: category?.icon ?? null,
         categoryColorKey: category?.colorKey ?? null,
+        // Despesa sem categoria conhecida entra como variável: é o que ela é
+        // até que alguém diga o contrário, e some do grupo distorceria o total.
+        categoryKind: category?.kind ?? CategoryKind.VARIABLE,
         amount,
         percentage: totalExpense > 0 ? Number(((amount / totalExpense) * 100).toFixed(1)) : 0,
         transactionCount: row._count._all,
       };
     })
     .sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * As mesmas despesas de `byCategory`, separadas em fixas e variáveis.
+ *
+ * O corte sai da categoria, não da transação: a divisão é uma propriedade do
+ * tipo de gasto ("aluguel é fixo"), e derivá-la aqui — em vez de gravá-la em
+ * cada linha — significa que reclassificar uma categoria corrige o histórico
+ * inteiro de uma vez, sem varrer transação por transação.
+ */
+function splitByKind(
+  rows: ReportCategoryTotalDTO[],
+  totalExpense: number
+): { fixed: ReportKindTotalDTO; variable: ReportKindTotalDTO } {
+  function group(kind: CategoryKind): ReportKindTotalDTO {
+    const categories = rows.filter((row) => row.categoryKind === kind);
+    const amount = toCents(categories.reduce((sum, row) => sum + row.amount, 0));
+
+    return {
+      kind,
+      amount,
+      // Recalculada do total, e não somada das fatias: somar percentuais já
+      // arredondados a uma casa faz "fixas + variáveis" fechar em 99,9%.
+      percentage: totalExpense > 0 ? Number(((amount / totalExpense) * 100).toFixed(1)) : 0,
+      transactionCount: categories.reduce((sum, row) => sum + row.transactionCount, 0),
+      categories,
+    };
+  }
+
+  return { fixed: group(CategoryKind.FIXED), variable: group(CategoryKind.VARIABLE) };
 }
 
 interface MonthlyRow {
@@ -282,6 +316,7 @@ export async function getReportSummary(
     expenseCount: totals.expenseCount,
     uncategorizedCount,
     byCategory,
+    byKind: splitByKind(byCategory, totals.expense),
     monthly,
   };
 }
