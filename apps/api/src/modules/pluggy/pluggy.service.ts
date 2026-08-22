@@ -169,6 +169,65 @@ export async function getUserItem(userId: string, pluggyItemId: string): Promise
 }
 
 /** Sincroniza um item **já resolvido**, do dono já conferido. */
+/**
+ * Quanto o sync volta no tempo além do que já tem.
+ *
+ * Trinta dias porque o que muda depois de gravado é lançamento pendente virando
+ * efetivado, e isso acontece em dias, não em meses. Encurtar demais perderia
+ * essas correções; alargar traz de volta o problema que a janela resolve.
+ */
+const JANELA_REVISITA_DIAS = 30;
+const JANELA_REVISITA_MS = JANELA_REVISITA_DIAS * 24 * 60 * 60 * 1000;
+
+/**
+ * Teto de linhas por ida ao banco. O Postgres tem um limite de parâmetros por
+ * consulta (~65k) e cada transação ocupa vários, então um `createMany` com o
+ * extrato inteiro de uma vez falharia justamente no caso que mais importa: o
+ * primeiro sync.
+ */
+const LOTE = 500;
+
+export function emLotes<T>(items: T[], tamanho: number): T[][] {
+  const lotes: T[][] = [];
+  for (let i = 0; i < items.length; i += tamanho) {
+    lotes.push(items.slice(i, i + tamanho));
+  }
+  return lotes;
+}
+
+/**
+ * A data a partir da qual pedir o extrato: `JANELA_REVISITA_DIAS` antes da
+ * transação mais recente que já temos, no formato `YYYY-MM-DD` que a Pluggy
+ * aceita. `undefined` quando a conta não tem nada — aí é primeiro sync, e o
+ * pedido tem de ser do histórico inteiro.
+ */
+export function janelaDeRevisita(maisRecente: Date | null | undefined): string | undefined {
+  if (!maisRecente) return undefined;
+  return new Date(maisRecente.getTime() - JANELA_REVISITA_MS).toISOString().slice(0, 10);
+}
+
+/** As linhas locais correspondentes a uma lista de ids da Pluggy, em lotes. */
+async function buscarPorPluggyIds(pluggyIds: string[]) {
+  const encontradas = [];
+  for (const lote of emLotes(pluggyIds, LOTE)) {
+    encontradas.push(
+      ...(await prisma.transaction.findMany({
+        where: { pluggyTransactionId: { in: lote } },
+        select: {
+          id: true,
+          pluggyTransactionId: true,
+          description: true,
+          amount: true,
+          type: true,
+          date: true,
+          accountId: true,
+        },
+      }))
+    );
+  }
+  return encontradas;
+}
+
 export async function syncItem(item: SyncableItem): Promise<SyncResult> {
   const { userId, pluggyItemId } = item;
   const client = await getPluggyClientForUser(userId);
@@ -252,60 +311,99 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
     accountsSynced++;
 
     // 5. Transações da conta, via cursor pagination (v2)
+    //
+    // Incremental: pede à Pluggy só de `JANELA_REVISITA_DIAS` antes da
+    // transação mais recente que já temos. Antes pedia o extrato inteiro toda
+    // vez, o que fazia o custo de sincronizar crescer para sempre junto com o
+    // histórico — e numa função serverless isso termina em timeout, não em
+    // lentidão.
+    //
+    // A janela existe porque nem tudo que muda é novo: lançamento pendente
+    // vira efetivado e muda de valor e de data dias depois de aparecer. Pedir
+    // só o que vem "depois da última transação" perderia essas correções.
+    const maisRecente = await prisma.transaction.findFirst({
+      where: { accountId: accountRecord.id },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+
+    const dateFrom = janelaDeRevisita(maisRecente?.date);
+
     const transactions: PluggyTransaction[] = await client
-      .fetchAllTransactions(pAccount.id)
+      .fetchAllTransactions(pAccount.id, dateFrom ? { dateFrom } : undefined)
       .catch((err: any) => {
         console.warn(`Erro ao buscar transações da conta ${pAccount.id}:`, err?.message);
         return [] as PluggyTransaction[];
       });
 
-    // O upsert não diz se criou ou atualizou, e o pipeline só deve rodar sobre
-    // o que é novo — reprocessar o que já foi revisado ressuscitaria sugestões
-    // que o usuário já julgou.
-    const idsRemotos = transactions.map((t) => t.id);
-    const jaExistentes = new Set(
-      (
-        await prisma.transaction.findMany({
-          where: { pluggyTransactionId: { in: idsRemotos } },
-          select: { pluggyTransactionId: true },
-        })
-      ).map((t) => t.pluggyTransactionId!)
+    if (transactions.length === 0) continue;
+
+    // O que já existe, com os campos que a Pluggy pode ter corrigido — para a
+    // comparação abaixo distinguir "voltou dentro da janela" de "mudou".
+    const existentes = await buscarPorPluggyIds(transactions.map((t) => t.id));
+    const existentePorPluggyId = new Map(
+      existentes.map((t) => [t.pluggyTransactionId!, t] as const)
     );
+
+    const novas: Prisma.TransactionCreateManyInput[] = [];
+    const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
 
     for (const pTx of transactions) {
       const rawAmount = pTx.amount ?? 0;
-      const isExpense = pTx.type === "DEBIT" || rawAmount < 0;
-      const description = (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim();
+      const campos = {
+        description: (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim(),
+        amount: new Prisma.Decimal(Math.abs(rawAmount)),
+        type:
+          pTx.type === "DEBIT" || rawAmount < 0
+            ? TransactionType.EXPENSE
+            : TransactionType.INCOME,
+        date: new Date(pTx.date),
+        accountId: accountRecord.id,
+      };
 
-      // Deduplicação por pluggyTransactionId
-      const saved = await prisma.transaction.upsert({
-        where: { pluggyTransactionId: pTx.id },
-        update: {
-          description,
-          amount: new Prisma.Decimal(Math.abs(rawAmount)),
-          type: isExpense ? TransactionType.EXPENSE : TransactionType.INCOME,
-          date: new Date(pTx.date),
-          accountId: accountRecord.id,
-        },
-        create: {
-          userId,
-          accountId: accountRecord.id,
-          pluggyTransactionId: pTx.id,
-          description,
-          amount: new Prisma.Decimal(Math.abs(rawAmount)),
-          type: isExpense ? TransactionType.EXPENSE : TransactionType.INCOME,
-          date: new Date(pTx.date),
-          isRecurring: false,
-        },
-        select: { id: true },
-      });
+      const existente = existentePorPluggyId.get(pTx.id);
 
-      if (!jaExistentes.has(pTx.id)) {
-        idsNovos.push(saved.id);
+      if (!existente) {
+        novas.push({ userId, pluggyTransactionId: pTx.id, isRecurring: false, ...campos });
+        continue;
       }
 
-      transactionsSynced++;
+      // Reescrever uma linha idêntica custa uma ida ao banco e não muda nada —
+      // e, com a janela de revisita, quase tudo que volta é idêntico.
+      if (
+        existente.description === campos.description &&
+        existente.amount.equals(campos.amount) &&
+        existente.type === campos.type &&
+        existente.date.getTime() === campos.date.getTime() &&
+        existente.accountId === campos.accountId
+      ) {
+        continue;
+      }
+
+      alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));
     }
+
+    // Uma ida ao banco por lote, e não uma por transação. Era o `await` dentro
+    // do laço que fazia o primeiro sync levar minutos: cada upsert é um
+    // ida-e-volta até o Neon, e eles aconteciam em fila.
+    for (const lote of emLotes(novas, LOTE)) {
+      // `skipDuplicates` cobre a corrida com um sync simultâneo: quem perde a
+      // corrida ignora a linha em vez de estourar no unique.
+      await prisma.transaction.createMany({ data: lote, skipDuplicates: true });
+    }
+
+    for (const lote of emLotes(alteracoes, LOTE)) {
+      await prisma.$transaction(lote);
+    }
+
+    // O pipeline de revisão só deve rodar sobre o que é novo — reprocessar o
+    // que já foi revisado ressuscitaria sugestões que o usuário já julgou.
+    if (novas.length > 0) {
+      const criadas = await buscarPorPluggyIds(novas.map((n) => n.pluggyTransactionId!));
+      idsNovos.push(...criadas.map((t) => t.id));
+    }
+
+    transactionsSynced += transactions.length;
   }
 
   const review = await processNewTransactions(userId, idsNovos);
