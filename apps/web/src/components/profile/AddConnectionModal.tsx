@@ -50,7 +50,7 @@ export function AddConnectionModal({
       const result = await addItem(itemId.trim());
       const institution = result.item?.institutionName ?? "Instituição";
       toast.success(
-        `${institution} conectada — ${result.accountsSynced} contas e ${result.transactionsSynced} transações importadas.`
+        `${institution} conectada — ${result.accountsSynced} contas e ${result.transactionsSynced} transações do mês importadas.`
       );
       onAdded();
       handleClose();
@@ -125,9 +125,14 @@ export function AddConnectionModal({
           />
         </Field>
 
+        {/* Dizer "o histórico" seria promessa quebrada: a primeira importação
+            traz só o mês corrente, de propósito, para ter tamanho conhecido.
+            Quem conecta um banco e vê meia dúzia de lançamentos precisa saber
+            que é assim, e não que faltou coisa. */}
         <p className="text-xs text-text-secondary leading-relaxed">
-          A importação traz as contas e o histórico de transações da instituição, e pode levar
-          alguns segundos.
+          A importação traz as contas e as transações <strong>do mês corrente</strong>, e pode
+          levar alguns segundos. Os meses anteriores não vêm — daqui em diante, cada
+          sincronização busca o que for novo.
         </p>
       </form>
     </Modal>

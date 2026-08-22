@@ -169,7 +169,6 @@ export async function getUserItem(userId: string, pluggyItemId: string): Promise
   return item;
 }
 
-/** Sincroniza um item **já resolvido**, do dono já conferido. */
 /**
  * Quanto o sync volta no tempo além do que já tem.
  *
@@ -181,13 +180,33 @@ const JANELA_REVISITA_DIAS = 30;
 const JANELA_REVISITA_MS = JANELA_REVISITA_DIAS * 24 * 60 * 60 * 1000;
 
 /**
- * A data a partir da qual pedir o extrato: `JANELA_REVISITA_DIAS` antes da
- * transação mais recente que já temos, no formato `YYYY-MM-DD` que a Pluggy
- * aceita. `undefined` quando a conta não tem nada — aí é primeiro sync, e o
- * pedido tem de ser do histórico inteiro.
+ * A data a partir da qual pedir o extrato à Pluggy, no formato `YYYY-MM-DD`.
+ *
+ * Dois casos, e o primeiro é o que dá teto ao trabalho:
+ *
+ * - **Conta nova**: só o mês corrente. Um extrato inteiro não tem tamanho
+ *   conhecido — pode ser um mês ou cinco anos — e um primeiro sync sem teto é
+ *   exatamente o que estoura o limite de tempo de uma função serverless. O
+ *   preço é que a conexão nasce sabendo só o mês em que foi criada; o histórico
+ *   anterior não vem, e não vem depois (a janela seguinte parte do que já
+ *   existe).
+ * - **Conta que já sincronizou**: trinta dias antes da transação mais recente.
+ *   Nem tudo que muda é novo — lançamento pendente vira efetivado e muda valor
+ *   e data dias depois de aparecer, e pedir só "o que veio depois da última"
+ *   perderia essas correções.
+ *
+ * `agora` é injetável porque uma função que lê o relógio por dentro não tem
+ * como ser testada na virada do mês.
  */
-export function janelaDeRevisita(maisRecente: Date | null | undefined): string | undefined {
-  if (!maisRecente) return undefined;
+export function dataInicialDaBusca(
+  maisRecente: Date | null | undefined,
+  agora: Date = new Date()
+): string {
+  if (!maisRecente) {
+    return new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1))
+      .toISOString()
+      .slice(0, 10);
+  }
   return new Date(maisRecente.getTime() - JANELA_REVISITA_MS).toISOString().slice(0, 10);
 }
 
@@ -209,6 +228,7 @@ async function buscarPorPluggyIds(pluggyIds: string[]) {
   );
 }
 
+/** Sincroniza um item **já resolvido**, do dono já conferido. */
 export async function syncItem(item: SyncableItem): Promise<SyncResult> {
   const { userId, pluggyItemId } = item;
   const client = await getPluggyClientForUser(userId);
@@ -293,25 +313,19 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
 
     // 5. Transações da conta, via cursor pagination (v2)
     //
-    // Incremental: pede à Pluggy só de `JANELA_REVISITA_DIAS` antes da
-    // transação mais recente que já temos. Antes pedia o extrato inteiro toda
-    // vez, o que fazia o custo de sincronizar crescer para sempre junto com o
-    // histórico — e numa função serverless isso termina em timeout, não em
-    // lentidão.
-    //
-    // A janela existe porque nem tudo que muda é novo: lançamento pendente
-    // vira efetivado e muda de valor e de data dias depois de aparecer. Pedir
-    // só o que vem "depois da última transação" perderia essas correções.
+    // Sempre com data inicial: antes pedia o extrato inteiro toda vez, o que
+    // fazia o custo de sincronizar crescer para sempre junto com o histórico.
+    // Ver `dataInicialDaBusca` para as duas janelas e o que cada uma custa.
     const maisRecente = await prisma.transaction.findFirst({
       where: { accountId: accountRecord.id },
       orderBy: { date: "desc" },
       select: { date: true },
     });
 
-    const dateFrom = janelaDeRevisita(maisRecente?.date);
+    const dateFrom = dataInicialDaBusca(maisRecente?.date);
 
     const transactions: PluggyTransaction[] = await client
-      .fetchAllTransactions(pAccount.id, dateFrom ? { dateFrom } : undefined)
+      .fetchAllTransactions(pAccount.id, { dateFrom })
       .catch((err: any) => {
         console.warn(`Erro ao buscar transações da conta ${pAccount.id}:`, err?.message);
         return [] as PluggyTransaction[];

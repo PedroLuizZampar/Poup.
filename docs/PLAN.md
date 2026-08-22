@@ -46,7 +46,16 @@ Poup/
 7. CRUD de categorias
 8. CRUD de transações (filtros por mês/conta/categoria/tipo/busca, edição, categorização, marcar como recorrente)
 9. Autenticação Pluggy (troca client id/secret por `apiKey`, cache em memória com renovação — o token expira em ~2h)
-10. Sync: resolve o `Item` pelo par `(userId, pluggyItemId)`, importa contas e transações, deduplica por `pluggyTransactionId`
+10. Sync: resolve o `Item` pelo par `(userId, pluggyItemId)`, importa contas e
+    transações, deduplica por `pluggyTransactionId`. **Sempre com data inicial**,
+    e nunca "o extrato inteiro": conexão nova traz só o mês corrente — o
+    histórico anterior não vem, e não vem depois — e conexão já sincronizada
+    volta 30 dias antes da transação mais recente, porque lançamento pendente
+    vira efetivado dias depois e muda valor e data. O teto existe porque um
+    primeiro sync sem tamanho conhecido é o que estoura o limite de tempo de uma
+    função serverless. Escrita em lote (`createMany` e `$transaction`, teto de
+    500 em `lib/lotes.ts`): antes era um `upsert` por transação, e com ~50ms de
+    latência até o Neon isso é mais de um minuto para mil linhas
 11. Motor de palpite de categoria (`apps/api/src/lib/categorization/`): histórico
     do próprio usuário, tabela de palavras-chave e categoria da Pluggy, nessa ordem
 12. Nomes de instituição por tabela COMPE + nome do conector (`apps/api/src/lib/institutions.ts`)
