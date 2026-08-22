@@ -10,6 +10,7 @@ import {
   type TransferCandidate,
 } from "../../lib/categorization";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import { buscarEmLotes, emLotes, LOTE } from "../../lib/lotes";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -42,20 +43,22 @@ export async function processNewTransactions(
   const systemIds = await ensureSystemCategories(prisma, userId);
   const systemIdSet = new Set(Object.values(systemIds));
 
-  const novas = await prisma.transaction.findMany({
-    where: { id: { in: transactionIds }, userId },
-    select: {
-      id: true,
-      accountId: true,
-      amount: true,
-      type: true,
-      date: true,
-      description: true,
-      categoryId: true,
-      transferPairId: true,
-      account: { select: { type: true } },
-    },
-  });
+  const novas = await buscarEmLotes(transactionIds, (lote) =>
+    prisma.transaction.findMany({
+      where: { id: { in: lote }, userId },
+      select: {
+        id: true,
+        accountId: true,
+        amount: true,
+        type: true,
+        date: true,
+        description: true,
+        categoryId: true,
+        transferPairId: true,
+        account: { select: { type: true } },
+      },
+    })
+  );
 
   if (novas.length === 0) {
     return { transfers: 0, suggested: 0, withoutGuess: 0 };
@@ -106,15 +109,26 @@ export async function processNewTransactions(
     universo.map(toCandidate)
   );
 
+  // Cada par ganha o próprio `transferPairId`, então não há um `updateMany` só
+  // que resolva todos. Mas eles podem viajar juntos: um `$transaction` manda o
+  // lote inteiro numa ida ao banco, enquanto um `await` por par custava um
+  // ida-e-volta cada. Num primeiro sync, onde os pares saem às centenas, era a
+  // diferença entre segundos e dezenas de segundos.
   const emTransferencia = new Set<string>();
-  for (const par of pares) {
-    const pairId = randomUUID();
-    await prisma.transaction.updateMany({
-      where: { id: { in: [par.aId, par.bId] }, userId },
-      data: { categoryId: systemIds[SystemCategoryKey.TRANSFER], transferPairId: pairId },
-    });
+  const marcacoes = pares.map((par) => {
     emTransferencia.add(par.aId);
     emTransferencia.add(par.bId);
+    return prisma.transaction.updateMany({
+      where: { id: { in: [par.aId, par.bId] }, userId },
+      data: {
+        categoryId: systemIds[SystemCategoryKey.TRANSFER],
+        transferPairId: randomUUID(),
+      },
+    });
+  });
+
+  for (const lote of emLotes(marcacoes, LOTE)) {
+    await prisma.$transaction(lote);
   }
 
   // A outra ponta pode ter entrado num sync anterior — e o sync roda este
@@ -142,9 +156,9 @@ export async function processNewTransactions(
     (t) => !emTransferencia.has(t.id) && t.categoryId === null
   );
 
-  if (semDecisao.length > 0) {
+  for (const lote of emLotes(semDecisao.map((t) => t.id))) {
     await prisma.transaction.updateMany({
-      where: { id: { in: semDecisao.map((t) => t.id) }, userId },
+      where: { id: { in: lote }, userId },
       data: { categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED] },
     });
   }
@@ -176,11 +190,8 @@ export async function processNewTransactions(
     confidence: palpite?.confidence ?? 0,
   }));
 
-  if (sugestoes.length > 0) {
-    await prisma.categorySuggestion.createMany({
-      data: sugestoes,
-      skipDuplicates: true,
-    });
+  for (const lote of emLotes(sugestoes)) {
+    await prisma.categorySuggestion.createMany({ data: lote, skipDuplicates: true });
   }
 
   // Contagem sobre o palpite, não sobre o retorno do `createMany`: o que a

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emLotes, janelaDeRevisita } from "./pluggy.service";
+import { emLotes } from "../../lib/lotes";
+import { janelaDeRevisita } from "./pluggy.service";
 
 /**
  * As duas peças puras do sync incremental. O resto do `syncItem` fala com a

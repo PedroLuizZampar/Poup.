@@ -16,6 +16,7 @@ import {
   resolveAccountInstitution,
   resolveItemInstitution,
 } from "../../lib/institutions";
+import { buscarEmLotes, emLotes } from "../../lib/lotes";
 import { processNewTransactions } from "../categorization/categorization.service";
 import type { ProcessResult } from "../categorization/categorization.service";
 
@@ -180,22 +181,6 @@ const JANELA_REVISITA_DIAS = 30;
 const JANELA_REVISITA_MS = JANELA_REVISITA_DIAS * 24 * 60 * 60 * 1000;
 
 /**
- * Teto de linhas por ida ao banco. O Postgres tem um limite de parâmetros por
- * consulta (~65k) e cada transação ocupa vários, então um `createMany` com o
- * extrato inteiro de uma vez falharia justamente no caso que mais importa: o
- * primeiro sync.
- */
-const LOTE = 500;
-
-export function emLotes<T>(items: T[], tamanho: number): T[][] {
-  const lotes: T[][] = [];
-  for (let i = 0; i < items.length; i += tamanho) {
-    lotes.push(items.slice(i, i + tamanho));
-  }
-  return lotes;
-}
-
-/**
  * A data a partir da qual pedir o extrato: `JANELA_REVISITA_DIAS` antes da
  * transação mais recente que já temos, no formato `YYYY-MM-DD` que a Pluggy
  * aceita. `undefined` quando a conta não tem nada — aí é primeiro sync, e o
@@ -208,24 +193,20 @@ export function janelaDeRevisita(maisRecente: Date | null | undefined): string |
 
 /** As linhas locais correspondentes a uma lista de ids da Pluggy, em lotes. */
 async function buscarPorPluggyIds(pluggyIds: string[]) {
-  const encontradas = [];
-  for (const lote of emLotes(pluggyIds, LOTE)) {
-    encontradas.push(
-      ...(await prisma.transaction.findMany({
-        where: { pluggyTransactionId: { in: lote } },
-        select: {
-          id: true,
-          pluggyTransactionId: true,
-          description: true,
-          amount: true,
-          type: true,
-          date: true,
-          accountId: true,
-        },
-      }))
-    );
-  }
-  return encontradas;
+  return buscarEmLotes(pluggyIds, (lote) =>
+    prisma.transaction.findMany({
+      where: { pluggyTransactionId: { in: lote } },
+      select: {
+        id: true,
+        pluggyTransactionId: true,
+        description: true,
+        amount: true,
+        type: true,
+        date: true,
+        accountId: true,
+      },
+    })
+  );
 }
 
 export async function syncItem(item: SyncableItem): Promise<SyncResult> {
@@ -386,13 +367,13 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
     // Uma ida ao banco por lote, e não uma por transação. Era o `await` dentro
     // do laço que fazia o primeiro sync levar minutos: cada upsert é um
     // ida-e-volta até o Neon, e eles aconteciam em fila.
-    for (const lote of emLotes(novas, LOTE)) {
+    for (const lote of emLotes(novas)) {
       // `skipDuplicates` cobre a corrida com um sync simultâneo: quem perde a
       // corrida ignora a linha em vez de estourar no unique.
       await prisma.transaction.createMany({ data: lote, skipDuplicates: true });
     }
 
-    for (const lote of emLotes(alteracoes, LOTE)) {
+    for (const lote of emLotes(alteracoes)) {
       await prisma.$transaction(lote);
     }
 
