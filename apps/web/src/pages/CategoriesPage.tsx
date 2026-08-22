@@ -31,6 +31,7 @@ export function CategoriesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [sortBy, setSortBy] = useState<"spent" | "name" | "count" | "kind" | "created">("spent");
+  const [kindFilter, setKindFilter] = useState<"all" | CategoryKind>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryDTO | null>(null);
 
@@ -73,17 +74,22 @@ export function CategoriesPage() {
   const categoryStats = useMemo(() => {
     const stats: Record<
       string,
-      { spent: number; txCount: number; budget?: BudgetDTO }
+      { spent: number; received: number; txCount: number; budget?: BudgetDTO }
     > = {};
 
     categories.forEach((cat) => {
-      stats[cat.id] = { spent: 0, txCount: 0 };
+      stats[cat.id] = { spent: 0, received: 0, txCount: 0 };
     });
 
+    // O que entrou é somado à parte porque uma categoria não tem tipo: "Renda"
+    // e "Salário" só movimentam para dentro, e olhar só o gasto as descreveria
+    // como paradas.
     transactions.forEach((tx) => {
       if (tx.categoryId && stats[tx.categoryId]) {
         if (tx.type === "EXPENSE") {
           stats[tx.categoryId].spent += tx.amount;
+        } else {
+          stats[tx.categoryId].received += tx.amount;
         }
         stats[tx.categoryId].txCount += 1;
       }
@@ -98,9 +104,11 @@ export function CategoriesPage() {
     return stats;
   }, [categories, transactions, budgets]);
 
-  // Ordenação das categorias
+  // Filtro e ordenação das categorias
   const sortedCategories = useMemo(() => {
-    const list = [...categories];
+    const list = categories.filter(
+      (cat) => kindFilter === "all" || cat.kind === kindFilter
+    );
     switch (sortBy) {
       case "spent":
         return list.sort(
@@ -123,7 +131,7 @@ export function CategoriesPage() {
       default:
         return list;
     }
-  }, [categories, sortBy, categoryStats]);
+  }, [categories, sortBy, kindFilter, categoryStats]);
 
   // Métricas do resumo
   const totalCategories = categories.length;
@@ -269,22 +277,40 @@ export function CategoriesPage() {
       {/* Barra de Ordenação */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <span className="text-xs font-semibold text-text-secondary">
-          Lista de categorias ({sortedCategories.length})
+          {/* Com filtro ligado, o total some da contagem — e "12 categorias"
+              sem dizer de quantas engana quem esqueceu o filtro aberto. */}
+          Lista de categorias ({sortedCategories.length}
+          {kindFilter !== "all" && ` de ${totalCategories}`})
         </span>
 
-        <div className="w-full sm:w-48">
-          <Select
-            size="sm"
-            value={sortBy}
-            onChange={(val) => setSortBy(val as any)}
-            options={[
-              { value: "spent", label: "Maior gasto" },
-              { value: "count", label: "Mais usadas" },
-              { value: "kind", label: "Fixas primeiro" },
-              { value: "name", label: "Nome (A-Z)" },
-              { value: "created", label: "Ordem de criação" },
-            ]}
-          />
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="w-full sm:w-44">
+            <Select
+              size="sm"
+              value={kindFilter}
+              onChange={(val) => setKindFilter(val as "all" | CategoryKind)}
+              options={[
+                { value: "all", label: "Fixas e variáveis" },
+                { value: "FIXED", label: "Só as fixas" },
+                { value: "VARIABLE", label: "Só as variáveis" },
+              ]}
+            />
+          </div>
+
+          <div className="w-full sm:w-48">
+            <Select
+              size="sm"
+              value={sortBy}
+              onChange={(val) => setSortBy(val as any)}
+              options={[
+                { value: "spent", label: "Maior gasto" },
+                { value: "count", label: "Mais usadas" },
+                { value: "kind", label: "Fixas primeiro" },
+                { value: "name", label: "Nome (A-Z)" },
+                { value: "created", label: "Ordem de criação" },
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -306,15 +332,35 @@ export function CategoriesPage() {
         />
       ) : sortedCategories.length === 0 ? (
         <EmptyState
-          title="Nenhuma categoria encontrada"
-          description="Crie categorias personalizadas para organizar suas finanças."
-          action={{
-            label: "Criar primeira categoria",
-            onClick: () => {
-              setEditingCategory(null);
-              setIsModalOpen(true);
-            },
-          }}
+          /* Lista vazia por filtro e lista vazia por não haver categoria são
+             becos diferentes: um se sai limpando o filtro, o outro criando a
+             primeira categoria. Oferecer "criar categoria" a quem só filtrou
+             demais manda a pessoa para o lado errado. */
+          title={
+            kindFilter === "all"
+              ? "Nenhuma categoria encontrada"
+              : kindFilter === "FIXED"
+              ? "Nenhuma categoria fixa"
+              : "Nenhuma categoria variável"
+          }
+          description={
+            kindFilter === "all"
+              ? "Crie categorias personalizadas para organizar suas finanças."
+              : kindFilter === "FIXED"
+              ? "Você ainda não marcou nenhuma categoria como fixa. Abra uma e escolha “Fixa” no tipo de movimentação."
+              : "Todas as suas categorias estão marcadas como fixas."
+          }
+          action={
+            kindFilter === "all"
+              ? {
+                  label: "Criar primeira categoria",
+                  onClick: () => {
+                    setEditingCategory(null);
+                    setIsModalOpen(true);
+                  },
+                }
+              : { label: "Mostrar todas", onClick: () => setKindFilter("all") }
+          }
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -360,13 +406,18 @@ export function CategoriesPage() {
                         <span className="font-display font-bold text-sm md:text-base text-text-primary truncate">
                           {cat.name}
                         </span>
-                        {/* Só a fixa se anuncia: variável é o estado de repouso,
-                            e um selo em cada card não distingue mais nada. */}
-                        {cat.kind === "FIXED" && (
-                          <Badge variant="info" size="sm" className="shrink-0">
-                            Fixa
-                          </Badge>
-                        )}
+                        {/* As duas se anunciam. Marcar só a fixa deixaria o
+                            card sem selo com dois significados possíveis —
+                            "é variável" e "ainda não olhei essa" — e é
+                            justamente essa diferença que se quer ver ao
+                            varrer a grade depois de classificar. */}
+                        <Badge
+                          variant={cat.kind === "FIXED" ? "info" : "neutral"}
+                          size="sm"
+                          className="shrink-0"
+                        >
+                          {cat.kind === "FIXED" ? "Fixa" : "Variável"}
+                        </Badge>
                       </span>
                       <span className="block text-xs text-text-secondary">
                         {txCount} {txCount === 1 ? "transação" : "transações"}
@@ -451,6 +502,21 @@ export function CategoriesPage() {
           setEditingCategory(null);
         }}
         categoryToEdit={editingCategory}
+        movement={
+          editingCategory && categoryStats[editingCategory.id]
+            ? {
+                // Entradas menos saídas: o sinal diz a direção, e o modal
+                // colore a partir dele.
+                amount: Number(
+                  (
+                    categoryStats[editingCategory.id].received -
+                    categoryStats[editingCategory.id].spent
+                  ).toFixed(2)
+                ),
+                txCount: categoryStats[editingCategory.id].txCount,
+              }
+            : null
+        }
         existingCategories={categories}
         onSaved={handleCategorySaved}
         onSaveCategory={handleSaveCategory}

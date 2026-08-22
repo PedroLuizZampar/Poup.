@@ -9,11 +9,17 @@ import { Badge } from "../ui/Badge";
 import { ColorPicker } from "./ColorPicker";
 import { IconPicker } from "./IconPicker";
 import { useToast } from "../ui/Toast";
+import { Money } from "../ui/Money";
 
 export interface CategoryFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   categoryToEdit?: CategoryDTO | null;
+  /**
+   * O que a categoria movimentou no mês corrente — negativo quando saiu mais
+   * do que entrou. Null numa categoria nova, que ainda não movimentou nada.
+   */
+  movement?: { amount: number; txCount: number } | null;
   existingCategories: CategoryDTO[];
   onSaved: (saved: CategoryDTO) => void;
   onSaveCategory: (
@@ -46,6 +52,7 @@ export function CategoryFormModal({
   isOpen,
   onClose,
   categoryToEdit,
+  movement,
   existingCategories,
   onSaved,
   onSaveCategory,
@@ -115,12 +122,28 @@ export function CategoryFormModal({
   const normalizedKey = normalizeColorKey(colorKey);
   const selectedKind = KIND_OPTIONS.find((option) => option.value === kind)!;
 
+  const movementAmount = movement?.amount ?? 0;
+  const movementClass =
+    movementAmount < 0
+      ? "text-expense"
+      : movementAmount > 0
+      ? "text-income"
+      : "text-text-disabled";
+
+  const previewCaption = !categoryToEdit
+    ? "Assim ela vai aparecer nas suas transações"
+    : !movement || movement.txCount === 0
+    ? "Sem movimentação este mês"
+    : `${movement.txCount} ${
+        movement.txCount === 1 ? "transação" : "transações"
+      } este mês`;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={categoryToEdit ? "Editar categoria" : "Nova categoria"}
-      description="Nome, cor e ícone definem como ela aparece nas suas transações."
+      description="Nome, cor e ícone definem como ela aparece; fixa ou variável, como ela é somada."
       maxWidth="2xl"
       footer={
         <>
@@ -147,15 +170,19 @@ export function CategoryFormModal({
             >
               {displayName || "Nome da categoria"}
             </p>
-            <p className="text-caption text-text-secondary mt-0.5">
-              Assim ela vai aparecer nas suas transações
-            </p>
+            <p className="text-caption text-text-secondary mt-0.5">{previewCaption}</p>
           </div>
           <div className="flex items-center gap-2.5 shrink-0">
             <Badge variant={kind === "FIXED" ? "info" : "neutral"} size="sm">
               {selectedKind.label}
             </Badge>
-            <span className="text-num text-expense tnum">− R$ 128,90</span>
+            {/* O valor era um "− R$ 128,90" fixo, que mostrava a cor e o peso
+                da tipografia mas mentia sobre a categoria. Agora é o que ela
+                de fato movimentou no mês — e o sinal segue a direção, porque
+                categoria não tem tipo: "Salário" movimenta para dentro. */}
+            <span className={`text-num tnum ${movementClass}`}>
+              <Money value={movementAmount} showSign={movementAmount !== 0} />
+            </span>
           </div>
         </div>
 
@@ -179,10 +206,10 @@ export function CategoryFormModal({
             </Field>
 
             <div className="flex flex-col gap-2 min-w-0">
-              <span className="text-label text-text-secondary select-none">Tipo de gasto</span>
+              <span className="text-label text-text-secondary select-none">Tipo de movimentação</span>
               <div
                 role="radiogroup"
-                aria-label="Tipo de gasto"
+                aria-label="Tipo de movimentação"
                 className="grid grid-cols-2 gap-1.5 p-1 rounded-ctl bg-surface-alt/60 border border-border"
               >
                 {KIND_OPTIONS.map((option) => {
