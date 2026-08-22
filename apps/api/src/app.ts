@@ -19,6 +19,20 @@ import { ForbiddenError } from "./lib/errors";
 export const app = express();
 
 /**
+ * Atrás de proxy, `req.ip` é o IP do proxy — o mesmo para todo mundo. Sem isto
+ * o limite por IP contaria as tentativas do mundo inteiro num balde só e
+ * bloquearia todos os usuários assim que qualquer um estourasse a cota.
+ *
+ * `1`, e não `true`: com `true` o Express acredita na ponta esquerda do
+ * `x-forwarded-for`, que é justamente a parte que o cliente consegue escrever.
+ * Com `1` ele pega o salto imediatamente anterior — o endereço que o proxy da
+ * frente apurou.
+ */
+if (process.env.VERCEL) {
+  app.set("trust proxy", 1);
+}
+
+/**
  * CORS restrito ao renderer, e **só sobre a API**.
  *
  * Aplicá-lo à aplicação inteira quebrava o próprio app em produção: o Vite
@@ -68,10 +82,19 @@ const apiCors = cors<express.Request>((req, callback) => {
   callback(null, { origin: true, credentials: true });
 });
 
-/** Sonda de saúde da plataforma — fora do `/api` porque não é da aplicação. */
-app.get("/health", (_req, res) => {
+/**
+ * Sonda de saúde da plataforma — fora do `/api` porque não é da aplicação.
+ *
+ * Existe também em `/api/health` porque, hospedado como função serverless, só o
+ * que está sob `/api` chega até aqui: `/health` seria servido pelo CDN, que não
+ * conhece esta rota. Um `vercel.json` reescreve um para o outro, e as duas
+ * respostas são a mesma.
+ */
+function health(_req: express.Request, res: express.Response) {
   res.json({ status: "ok" });
-});
+}
+
+app.get("/health", health);
 
 /**
  * Tudo da aplicação vive sob `/api`.
@@ -100,6 +123,8 @@ apiRouter.use("/budgets", budgetsRouter);
 apiRouter.use("/goals", goalsRouter);
 apiRouter.use("/notifications", notificationsRouter);
 apiRouter.use("/suggestions", suggestionsRouter);
+
+apiRouter.get("/health", health);
 
 app.use("/api", apiRouter);
 

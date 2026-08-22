@@ -10,3 +10,6 @@ release/
 Thumbs.db
 generated/
 dev-dist/
+
+# Vercel
+.vercel

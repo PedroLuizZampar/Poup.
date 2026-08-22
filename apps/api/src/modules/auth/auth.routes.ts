@@ -19,11 +19,11 @@ export const authRouter = Router();
 
 /**
  * Cadastro e login são as duas portas abertas da API — as únicas rotas sem
- * `requireAuth`. Com o app distribuído como executável, basta a porta 4000
- * ficar visível na rede para alguém criar contas ou tentar senhas em série;
- * o limite por IP é a barreira mínima.
+ * `requireAuth`. Basta a origem ficar alcançável para alguém criar contas ou
+ * tentar senhas em série; o limite por IP é a barreira mínima.
  */
 const authAttemptLimit = rateLimit({
+  scope: "auth",
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: "Muitas tentativas. Aguarde alguns minutos antes de tentar de novo.",

@@ -1,5 +1,9 @@
 generator client {
   provider = "prisma-client-js"
+  /// `rhel-openssl-3.0.x` e o runtime das funcoes da Vercel. Sem ele o client
+  /// gerado so traz o engine da maquina que rodou o build, e a funcao sobe sem
+  /// conseguir falar com o banco.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -271,4 +275,21 @@ model CategorySuggestion {
   category    Category?   @relation("SuggestedCategory", fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
+}
+
+/// Contagem de tentativas por IP, para as rotas sem autenticacao.
+///
+/// Morava num `Map` de processo, sob a premissa — escrita no proprio arquivo —
+/// de que "a API e um processo so". Em serverless isso deixa de valer: cada
+/// instancia teria o seu mapa, as tentativas se espalhariam entre elas e o
+/// limite viraria enfeite. No banco ha um contador so, que e o que a regra
+/// sempre quis dizer.
+model RateLimitHit {
+  /// `escopo:ip`. O escopo separa limites diferentes sobre o mesmo IP.
+  key     String   @id
+  count   Int      @default(1)
+  /// Quando a janela vira e a contagem recomeca.
+  resetAt DateTime
+
+  @@index([resetAt])
 }
