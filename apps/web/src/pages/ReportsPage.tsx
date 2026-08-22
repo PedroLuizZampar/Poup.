@@ -216,12 +216,18 @@ export function ReportsPage() {
                 />
               </div>
 
+              {/* A leitura em uma frase. O primeiro caso não é retórico: até
+                  alguém marcar a primeira categoria como fixa, o painel só
+                  sabe dizer que ninguém marcou nada — e dizer "a maior parte é
+                  margem de manobra" sobre 100% seria uma meia-verdade. */}
               <p className="text-caption text-text-secondary">
-                {fixedTotal > variableTotal
+                {fixedTotal === 0
+                  ? "Nenhuma categoria com gasto no período está marcada como fixa. Marque as suas em Categorias e este painel passa a separar as duas coisas."
+                  : variableTotal === 0
+                  ? "Todo o gasto do período caiu em categorias fixas — nada aqui foi decisão do mês."
+                  : fixedTotal > variableTotal
                   ? "A maior parte do que você gastou já estava comprometida antes do mês começar."
-                  : variableTotal > 0
-                  ? "A maior parte do que você gastou é margem de manobra — decisão do mês, não compromisso."
-                  : "Todas as despesas do período estão em categorias fixas."}
+                  : "A maior parte do que você gastou é margem de manobra — decisão do mês, não compromisso."}
               </p>
             </>
           )}
