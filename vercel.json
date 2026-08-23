@@ -4,7 +4,7 @@
   "outputDirectory": "apps/web/dist",
   "regions": ["gru1"],
   "functions": {
-    "api/[...path].ts": {
+    "api/**/*.ts": {
       "maxDuration": 60
     }
   },

@@ -58,9 +58,27 @@ Express inteiro rodando como serverless. O build do web vai para a CDN e a API
 atende em `/api` no **mesmo domínio** — origem única é requisito do service
 worker, não conveniência.
 
-No painel, ao importar o repositório, o `vercel.json` responde por quase tudo
-(build, diretório de saída, região, rotas). O que precisa ser feito à mão são as
-variáveis de ambiente, em Settings → Environment Variables:
+### Configuração do projeto
+
+Duas opções do painel precisam estar certas, e a primeira é a que mais custa
+descobrir errada:
+
+- **Root Directory: a raiz do repositório** (vazio), e não `apps/api`. A Vercel
+  detecta o Express e sugere `apps/api`, mas ali o `npm install` roda dentro do
+  workspace, onde `@poup/shared` é uma dependência que só existe pelo workspace
+  da raiz — o npm vai procurá-la no registro público, não acha, e o build morre
+  no install. Da raiz também é o único lugar de onde a Vercel enxerga este
+  `vercel.json` e a pasta `api/`.
+- **Framework Preset: Other.** O preset "Express" pressupõe outra disposição de
+  arquivos; aqui quem manda é o `vercel.json`.
+
+O resto (build, diretório de saída, região, rotas, cache) o `vercel.json`
+resolve.
+
+### Variáveis de ambiente
+
+Em Settings → Environment Variables. Todas precisam valer também em **Build**,
+porque o `prisma migrate deploy` roda durante o build:
 
 | Variável | Valor |
 | --- | --- |
@@ -70,14 +88,18 @@ variáveis de ambiente, em Settings → Environment Variables:
 
 `PLUGGY_BASE_URL`, `JWT_EXPIRES_IN` e `PORT` têm padrão e podem ficar de fora.
 
-Três decisões que já estão no `vercel.json` e valem saber por quê:
+### Por que o `vercel.json` está do jeito que está
 
 - **`regions: ["gru1"]`** — o Neon está em `sa-east-1`, e o padrão da Vercel é
   Washington. Sem isto cada ida ao banco atravessa o continente: a latência medida
   daqui é de ~50ms, e de fora do país passa de 120ms. Num pedido que faz dezenas
-  de consultas, é a diferença entre rápido e sofrível.
+  de consultas, é a diferença entre rápido e sofrível. (O *build* continua
+  rodando em `iad1` — isto vale para a função, que é o que atende requisição.)
 - **`maxDuration: 60`** — o teto do plano Hobby. O primeiro sync de uma conexão
-  traz só o mês corrente justamente para caber com folga.
+  traz só o mês corrente justamente para caber com folga. A chave é o glob
+  `api/**/*.ts`, e não o nome do arquivo: em glob, `[...path]` é classe de
+  caracteres, não nome literal, e a regra não casaria com nada — a função cairia
+  no padrão de 10s sem avisar.
 - **`buildCommand: npm run vercel-build`** — roda `prisma generate` e
   `prisma migrate deploy` antes do build do web. O `generate` não é opcional: a
   Vercel cacheia o `node_modules` entre builds e o client do Prisma ficaria velho.
