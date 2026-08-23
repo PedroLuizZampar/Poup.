@@ -111,9 +111,17 @@ porque o `prisma migrate deploy` roda durante o build:
   Ignorar o lock faz a Vercel resolver na própria plataforma. O preço é que o
   build de lá não é reprodutível ao pacote — resolve dentro das faixas do
   `package.json`. Localmente o lock continua valendo normalmente.
-- **`buildCommand: npm run vercel-build`** — roda `prisma generate` e
+- **`buildCommand: npm run build:vercel`** — roda `prisma generate` e
   `prisma migrate deploy` antes do build do web. O `generate` não é opcional: a
   Vercel cacheia o `node_modules` entre builds e o client do Prisma ficaria velho.
+- **O nome do script não pode ser `vercel-build`.** `vercel-build` é nome mágico:
+  além do `buildCommand`, o builder da função (`api/**/*.ts`) também o executa,
+  depois de um `npm install` próprio — e esse install reresolve a árvore e derruba
+  de novo o binário Linux do rollup, matando o `vite build` na segunda passada,
+  mesmo com o `--no-package-lock` acima. Daí a divisão: `build:vercel` é o
+  pipeline completo, chamado uma única vez pelo `buildCommand`; `vercel-build`
+  ficou só com o `prisma generate`, que é o que a função precisa refazer caso o
+  install do builder tenha reinstalado o `@prisma/client` por cima do gerado.
 
 O `binaryTargets` no `schema.prisma` inclui `rhel-openssl-3.0.x`, que é o runtime
 das funções — sem ele o client sobe sem conseguir falar com o banco.
