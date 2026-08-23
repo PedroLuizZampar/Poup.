@@ -96,10 +96,19 @@ porque o `prisma migrate deploy` roda durante o build:
   de consultas, é a diferença entre rápido e sofrível. (O *build* continua
   rodando em `iad1` — isto vale para a função, que é o que atende requisição.)
 - **`maxDuration: 60`** — o teto do plano Hobby. O primeiro sync de uma conexão
-  traz só o mês corrente justamente para caber com folga. A chave é o glob
-  `api/**/*.ts`, e não o nome do arquivo: em glob, `[...path]` é classe de
-  caracteres, não nome literal, e a regra não casaria com nada — a função cairia
-  no padrão de 10s sem avisar.
+  traz só o mês corrente justamente para caber com folga.
+- **`rewrites: /api/(.*) -> /api`** — a API é uma função só, em `api/index.ts`,
+  e é este rewrite que leva `/api/*` inteiro até ela. O arquivo já se chamou
+  `[...path].ts`, contando com o catch-all da Vercel, e ali a plataforma tratava
+  a rota como **um segmento só**: `/api/health` chegava no Express e
+  `/api/auth/login` voltava `NOT_FOUND` sem nunca tocar nele — o login em
+  produção morria em 404. Com o rewrite explícito o roteamento não depende de
+  como o nome do arquivo é interpretado.
+- **A URL original sobrevive ao rewrite.** O Express recebe `/api/auth/login`, e
+  não o destino `/api` — por isso o prefixo `/api` continua valendo dentro da
+  aplicação. Verificado em produção: `/health`, reescrito para `/api`, é
+  atendido pelo `app.get("/health")` e não pela rota gêmea de dentro do
+  `apiRouter`, que teria devolvido os headers de CORS.
 - **`installCommand: npm install --no-package-lock`** — o `package-lock.json`
   é gerado no Windows, e o npm só registra nele os binários da plataforma em que
   rodou: o lock tem `@rollup/rollup-win32-x64-msvc` e nenhum `linux`. No Linux o
