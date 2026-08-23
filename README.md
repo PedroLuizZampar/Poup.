@@ -100,6 +100,17 @@ porque o `prisma migrate deploy` roda durante o build:
   `api/**/*.ts`, e não o nome do arquivo: em glob, `[...path]` é classe de
   caracteres, não nome literal, e a regra não casaria com nada — a função cairia
   no padrão de 10s sem avisar.
+- **`installCommand: npm install --no-package-lock`** — o `package-lock.json`
+  é gerado no Windows, e o npm só registra nele os binários da plataforma em que
+  rodou: o lock tem `@rollup/rollup-win32-x64-msvc` e nenhum `linux`. No Linux o
+  npm então pula o binário que falta em vez de resolvê-lo
+  ([npm/cli#4828](https://github.com/npm/cli/issues/4828)), e o `vite build`
+  morre com "Cannot find module @rollup/rollup-linux-x64-gnu". Declarar os
+  pacotes de Linux à mão não resolve: há duas versões de esbuild na árvore (uma
+  aninhada dentro do vite, que é a que o build usa) e só se pode declarar uma.
+  Ignorar o lock faz a Vercel resolver na própria plataforma. O preço é que o
+  build de lá não é reprodutível ao pacote — resolve dentro das faixas do
+  `package.json`. Localmente o lock continua valendo normalmente.
 - **`buildCommand: npm run vercel-build`** — roda `prisma generate` e
   `prisma migrate deploy` antes do build do web. O `generate` não é opcional: a
   Vercel cacheia o `node_modules` entre builds e o client do Prisma ficaria velho.
