@@ -111,3 +111,38 @@ export function parecePagamentoDeFatura(description: string): boolean {
   if (!temPagamento) return false;
   return /\b(fatura|cartao|cartoes)\b/.test(texto);
 }
+
+/** O minimo de um `payments[]` da Pluggy para decidir qual deles quita. */
+export interface PagamentoDeFatura {
+  valueType: "INSTALLMENT_PAYMENT" | "FULL_PAYMENT" | "OTHER_PAYMENT";
+  paymentDate: Date;
+  amount: number;
+}
+
+/**
+ * Qual dos pagamentos de uma fatura e a quitacao dela.
+ *
+ * A versao antiga pegava o ultimo por data, e isso quebrou no dia em que o
+ * emissor lancou um **estorno** de compra como pagamento da fatura: a de agosto
+ * de 2026, de R$ 94,62, ficou registrada como paga por R$ 272 — o valor da
+ * compra devolvida, creditada no cartao onze dias depois da quitacao real.
+ *
+ * `OTHER_PAYMENT` e a gaveta do resto: e la que cai o credito que nao veio da
+ * conta do usuario. Descartar a gaveta inteira custa o conector que nao
+ * classifica nada — e esse custo e o barato dos dois, porque nao reconhecer
+ * deixa a despesa no relatorio (e a reserva por descricao ainda tem chance de
+ * acertar), enquanto reconhecer errado faz uma despesa real sumir.
+ *
+ * `INSTALLMENT_PAYMENT` fica: parcelar a fatura tambem e pagar a fatura, e o
+ * debito da parcela existe na conta corrente esperando ser reconhecido.
+ */
+export function pagamentoQueQuita<T extends PagamentoDeFatura>(pagamentos: T[]): T | null {
+  const classificados = pagamentos.filter((p) => p.valueType !== "OTHER_PAYMENT");
+
+  // Pagamento parcial e depois o resto: quem quita e o ultimo.
+  return (
+    [...classificados]
+      .sort((a, b) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime())
+      .pop() ?? null
+  );
+}

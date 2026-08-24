@@ -5,6 +5,7 @@ import { ensureSystemCategories } from "../../lib/systemCategories";
 import {
   JANELA_DE_PAGAMENTO_DIAS,
   casarPagamentos,
+  pagamentoQueQuita,
   parecePagamentoDeFatura,
   type DebitoCandidato,
   type FaturaPaga,
@@ -38,12 +39,10 @@ export async function sincronizarFaturas(
   let gravadas = 0;
 
   for (const bill of resposta.results) {
-    // A Pluggy pode devolver varios pagamentos por fatura (parcial e depois o
-    // resto). O ultimo e o que quita, e e o unico que interessa para casar com
-    // o debito na conta corrente.
-    const ultimoPagamento = [...(bill.payments ?? [])]
-      .sort((a, b) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime())
-      .pop();
+    // A Pluggy pode devolver varios pagamentos por fatura, e nem todo lancamento
+    // ali e dinheiro que o usuario mandou: um estorno de compra tambem chega
+    // como pagamento. Quem separa os dois e `pagamentoQueQuita`.
+    const quitacao = pagamentoQueQuita(bill.payments ?? []);
 
     const dados = {
       userId,
@@ -51,8 +50,11 @@ export async function sincronizarFaturas(
       dueDate: new Date(bill.dueDate),
       closingDate: bill.billClosingDate ? new Date(bill.billClosingDate) : null,
       totalAmount: new Prisma.Decimal(bill.totalAmount ?? 0),
-      paidAt: ultimoPagamento ? new Date(ultimoPagamento.paymentDate) : null,
-      paidAmount: ultimoPagamento ? new Prisma.Decimal(ultimoPagamento.amount) : null,
+      // Nulo quando nenhum pagamento quita — e nulo tambem **de volta**, se a
+      // fatura tinha sido gravada com um lancamento que nao quitava: o upsert
+      // reescreve as duas colunas a cada sync.
+      paidAt: quitacao ? new Date(quitacao.paymentDate) : null,
+      paidAmount: quitacao ? new Prisma.Decimal(quitacao.amount) : null,
     };
 
     await prisma.creditCardBill.upsert({

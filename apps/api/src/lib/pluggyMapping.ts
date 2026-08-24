@@ -64,6 +64,14 @@ function chaveDeMes(ano: number, mes: number): string {
  * qual e a fatura da *primeira* parcela; da segunda em diante, cada uma anda um
  * mes.
  *
+ * Isso vale **enquanto a parcela esta pendente**, e so ai. Quando ela e postada,
+ * a Pluggy a vincula a uma fatura e o `billForecastDate` passa a ser o mes
+ * *dela* — ja e a resposta certa, e somar o indice em cima empurra a linha para
+ * frente. Era o que acontecia: uma parcela 3/8 postada na fatura de agosto era
+ * gravada em outubro, e cada fechamento seguinte reempurrava as que faltavam.
+ * `jaNaFatura` e o que separa os dois mundos; quem sabe a resposta e o
+ * `creditCardMetadata.billId`, que so existe depois do fechamento.
+ *
  * Compra a vista tem `installmentNumber` ausente e nao desloca nada.
  *
  * A derivacao erra em um mes para compra feita depois do fechamento da fatura.
@@ -74,7 +82,8 @@ function chaveDeMes(ano: number, mes: number): string {
 export function mesDaFatura(
   data: Date,
   billForecastDate?: string | null,
-  installmentNumber?: number | null
+  installmentNumber?: number | null,
+  jaNaFatura?: boolean
 ): string {
   let ano: number;
   let mes: number; // 1-based
@@ -90,6 +99,7 @@ export function mesDaFatura(
   }
 
   const deslocamento =
+    !jaNaFatura &&
     typeof installmentNumber === "number" &&
     Number.isInteger(installmentNumber) &&
     installmentNumber >= 1
@@ -148,8 +158,14 @@ export function dadosDeParcela(
 
   // O deslocamento usa o indice **ja validado**: uma parcela "0 de 10" nao pode
   // empurrar a fatura para tras.
-  const billMonth = mesDaFatura(new Date(pTx.date), meta.billForecastDate, indice);
   const pluggyBillId = meta.billId ?? null;
+  // Vinculada a uma fatura = postada, e ai o forecast ja e o mes desta parcela.
+  const billMonth = mesDaFatura(
+    new Date(pTx.date),
+    meta.billForecastDate,
+    indice,
+    pluggyBillId !== null
+  );
 
   return indice === null
     ? { installmentIndex: null, installmentTotal: null, billMonth, pluggyBillId }

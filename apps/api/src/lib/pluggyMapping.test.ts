@@ -119,6 +119,19 @@ describe("mesDaFatura", () => {
     expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 0)).toBe("2026-09");
     expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 1.5)).toBe("2026-09");
   });
+
+  it("parcela ja vinculada a uma fatura nao desloca", () => {
+    // Postada, o `billForecastDate` deixa de ser a fatura da primeira parcela
+    // e passa a ser a **desta**. Somar o indice em cima disso empurra a parcela
+    // para frente, e de novo a cada fechamento.
+    expect(mesDaFatura(new Date("2026-08-11T00:00:00Z"), "2026-08", 3, true)).toBe("2026-08");
+  });
+
+  it("pendente continua deslocando pelo indice", () => {
+    // As parcelas de uma compra nova chegam todas juntas e todas com o mesmo
+    // forecast: e a fatura da primeira, e o deslocamento e o que as separa.
+    expect(mesDaFatura(new Date("2026-08-17T00:00:00Z"), "2026-09", 3, false)).toBe("2026-11");
+  });
 });
 
 describe("dadosDeParcela", () => {
@@ -155,6 +168,28 @@ describe("dadosDeParcela", () => {
       installmentTotal: 10,
       billMonth: "2027-01",
       pluggyBillId: null,
+    });
+  });
+
+  it("parcela ja postada fica no mes da propria fatura", () => {
+    // Caso real: compra de 02/06/2026 em 8x, parcela 3 vinculada pela Pluggy a
+    // fatura de agosto. O app gravava 2026-10 — dois meses a frente de uma
+    // fatura que o usuario ja tinha pago.
+    expect(
+      dadosDeParcela({
+        date: new Date("2026-08-11T00:00:00Z"),
+        creditCardMetadata: {
+          installmentNumber: 3,
+          totalInstallments: 8,
+          billForecastDate: "2026-08",
+          billId: "901172d7-2dcc-4f3f-be71-1c55ead5b6c2",
+        },
+      } as any)
+    ).toEqual({
+      installmentIndex: 3,
+      installmentTotal: 8,
+      billMonth: "2026-08",
+      pluggyBillId: "901172d7-2dcc-4f3f-be71-1c55ead5b6c2",
     });
   });
 

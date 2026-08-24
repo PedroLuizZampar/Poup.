@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { casarPagamentos, parecePagamentoDeFatura } from "./pagamentoDeFatura";
+import { casarPagamentos, pagamentoQueQuita, parecePagamentoDeFatura } from "./pagamentoDeFatura";
 
 const fatura = {
   billId: "fatura-1",
@@ -91,5 +91,49 @@ describe("parecePagamentoDeFatura", () => {
     expect(parecePagamentoDeFatura("PAGTO BOLETO ENERGIA")).toBe(false);
     expect(parecePagamentoDeFatura("FATURA DE ENERGIA")).toBe(false);
     expect(parecePagamentoDeFatura("SUPERMERCADO")).toBe(false);
+  });
+});
+
+describe("pagamentoQueQuita", () => {
+  const quitacao = {
+    valueType: "FULL_PAYMENT" as const,
+    paymentDate: new Date("2026-08-12T00:00:00Z"),
+    amount: 94.62,
+  };
+
+  it("ignora o credito lancado como OTHER_PAYMENT", () => {
+    // O caso real: um estorno de R$ 272 entrou na fatura de agosto como
+    // OTHER_PAYMENT, depois da quitacao. Pela data ele e o ultimo, e por isso
+    // o app passou a achar que a fatura de R$ 94,62 foi paga por R$ 272.
+    const estorno = {
+      valueType: "OTHER_PAYMENT" as const,
+      paymentDate: new Date("2026-08-22T00:00:00Z"),
+      amount: 272,
+    };
+
+    expect(pagamentoQueQuita([quitacao, estorno])).toEqual(quitacao);
+  });
+
+  it("entre pagamentos classificados, fica com o ultimo", () => {
+    const depois = { ...quitacao, paymentDate: new Date("2026-08-14T00:00:00Z"), amount: 30 };
+    expect(pagamentoQueQuita([quitacao, depois])).toEqual(depois);
+  });
+
+  it("aceita a quitacao de uma fatura parcelada", () => {
+    // Parcelar a fatura e pagar a fatura: o debito existe na conta corrente e
+    // precisa ser reconhecido como transferencia igual.
+    const parcelada = { ...quitacao, valueType: "INSTALLMENT_PAYMENT" as const, amount: 50 };
+    expect(pagamentoQueQuita([parcelada])).toEqual(parcelada);
+  });
+
+  it("nao inventa quitacao quando so ha OTHER_PAYMENT", () => {
+    // Preferir nao reconhecer: reconhecer errado faz uma despesa real sumir do
+    // relatorio, e a reserva por descricao ainda tem chance de acertar.
+    const soEstorno = { ...quitacao, valueType: "OTHER_PAYMENT" as const };
+    expect(pagamentoQueQuita([soEstorno])).toBeNull();
+  });
+
+  it("fatura sem pagamento nao esta paga", () => {
+    expect(pagamentoQueQuita([])).toBeNull();
   });
 });
