@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, FormEvent } from "react";
 import type { TransactionDTO, CategoryDTO } from "@poup/shared";
-import { updateTransaction } from "../../lib/api";
+import { undoCompensation, updateTransaction } from "../../lib/api";
 import { Modal } from "../ui/Modal";
 import { Field } from "../ui/Field";
 import { Input } from "../ui/Input";
@@ -8,6 +8,7 @@ import { Button } from "../ui/Button";
 import { CategoryTile } from "../ui/CategoryTile";
 import { CategorySelectModal } from "../categories/CategorySelectModal";
 import { SimilarTransactionsModal } from "./SimilarTransactionsModal";
+import { CompensationModal } from "./CompensationModal";
 import { useToast } from "../ui/Toast";
 import { formatDate } from "../../lib/format";
 import { useCategoryMap } from "../../hooks/useCategories";
@@ -20,6 +21,11 @@ interface TransactionDetailModalProps {
   categories: CategoryDTO[];
   onClose: () => void;
   onUpdated: (updated: TransactionDTO) => void;
+  /**
+   * Recarrega a lista inteira. Compensar e desfazer mexem em N+1 linhas de uma
+   * vez, e `onUpdated` só sabe trocar uma.
+   */
+  onReload?: () => void;
 }
 
 export function TransactionDetailModal({
@@ -27,6 +33,7 @@ export function TransactionDetailModal({
   categories,
   onClose,
   onUpdated,
+  onReload,
 }: TransactionDetailModalProps) {
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -35,6 +42,8 @@ export function TransactionDetailModal({
   /** Categoria recém-aplicada, quando vale oferecer repeti-la nas parecidas. */
   const [similarFor, setSimilarFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isCompensationOpen, setIsCompensationOpen] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -89,6 +98,26 @@ export function TransactionDetailModal({
       toast.error(err.message || "Erro ao atualizar a transação.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  /**
+   * Desfaz o vínculo a partir desta ponta, seja ela o crédito ou uma parcela: o
+   * servidor limpa o grupo inteiro. Recarrega tudo porque N+1 linhas mudaram.
+   */
+  async function desfazer() {
+    if (!transaction || undoing) return;
+
+    try {
+      setUndoing(true);
+      const { afetadas } = await undoCompensation(transaction.id);
+      toast.success("Compensação desfeita.", `${afetadas} lançamentos voltaram aos totais.`);
+      onReload?.();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao desfazer a compensação.");
+    } finally {
+      setUndoing(false);
     }
   }
 
@@ -240,6 +269,50 @@ export function TransactionDetailModal({
           />
         </Field>
 
+        {/* Compensação de estorno.
+            Só nasce no crédito: é a ordem em que a pessoa encontra o problema —
+            o estorno aparece na lista, e a pergunta seguinte é de onde ele veio.
+            Compensada, a linha troca a ação pela faixa com o desfazer. */}
+        {transaction.compensationId ? (
+          <div className="p-3.5 rounded-card bg-surface-alt/60 border border-border flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-overline uppercase tracking-wider text-text-secondary block">
+                Compensado
+              </span>
+              <span className="text-xs text-text-secondary">
+                Esta linha e a compra que ela cancela estão fora de todos os totais.
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              loading={undoing}
+              onClick={() => void desfazer()}
+            >
+              Desfazer
+            </Button>
+          </div>
+        ) : (
+          transaction.type === "INCOME" && (
+            <button
+              type="button"
+              onClick={() => setIsCompensationOpen(true)}
+              className="w-full p-3.5 rounded-card bg-surface-alt/60 border border-border hover:border-border-strong focus-ring cursor-pointer text-left transition-[border-color,box-shadow] duration-150 flex items-center justify-between gap-3"
+            >
+              <span className="min-w-0">
+                <span className="text-xs font-semibold text-text-primary block">
+                  Compensar compra parcelada
+                </span>
+                <span className="text-[11px] text-text-secondary">
+                  Ligue este crédito às parcelas da compra estornada.
+                </span>
+              </span>
+              <span className="text-xs font-semibold text-primary shrink-0">Escolher</span>
+            </button>
+          )
+        )}
+
         {/* Observações */}
         <Field id="tx-note" label="Observações (opcional)">
           <Input
@@ -250,6 +323,16 @@ export function TransactionDetailModal({
           />
         </Field>
       </form>
+
+      <CompensationModal
+        isOpen={isCompensationOpen}
+        onClose={() => setIsCompensationOpen(false)}
+        transactionId={transaction.id}
+        onDone={() => {
+          onReload?.();
+          onClose();
+        }}
+      />
     </Modal>
   );
 }

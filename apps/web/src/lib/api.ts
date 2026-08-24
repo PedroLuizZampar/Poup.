@@ -29,6 +29,7 @@ import type {
   SuggestionsResponse,
   SimilarTransactionsResponse,
   InstallmentsResponse,
+  CompensationCandidatesResponse,
 } from "@poup/shared";
 
 /**
@@ -272,6 +273,38 @@ export async function fetchInstallments(
   transactionId: string
 ): Promise<InstallmentsResponse> {
   return request<InstallmentsResponse>(`/transactions/${transactionId}/installments`);
+}
+
+/**
+ * As compras parceladas que este crédito pode cancelar. Traz também as
+ * inelegíveis, com o motivo: uma lista vazia não explica por que a compra que a
+ * pessoa procura não está lá.
+ */
+export async function fetchCompensationCandidates(
+  transactionId: string
+): Promise<CompensationCandidatesResponse> {
+  return request<CompensationCandidatesResponse>(
+    `/transactions/${transactionId}/compensation/candidates`
+  );
+}
+
+export async function compensateTransaction(
+  transactionId: string,
+  purchaseKey: string
+): Promise<{ compensationId: string; afetadas: number }> {
+  return request(`/transactions/${transactionId}/compensation`, {
+    method: "POST",
+    body: JSON.stringify({ purchaseKey }),
+  });
+}
+
+/** Desfaz o vínculo a partir de qualquer ponta — o crédito ou uma das parcelas. */
+export async function undoCompensation(
+  transactionId: string
+): Promise<{ afetadas: number }> {
+  return request(`/transactions/${transactionId}/compensation`, {
+    method: "DELETE",
+  });
 }
 
 export async function createTransaction(data: CreateTransactionRequest): Promise<TransactionDTO> {

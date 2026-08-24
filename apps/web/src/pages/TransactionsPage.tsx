@@ -29,6 +29,30 @@ function formatDay(day: string): string {
   return `${dayOfMonth}/${month}/${year}`;
 }
 
+/**
+ * O selo de compensada, para a linha da lista.
+ *
+ * `agruparCompras` reúne as parcelas que passam pelos filtros numa linha só,
+ * então o estado é da linha e não de uma transação solta: uma compra
+ * compensada aparece como **uma** linha com selo, e não como oito.
+ *
+ * `every` e não `some`: grupo meio compensado não existe — o servidor recusa —,
+ * mas se existisse o selo estaria mentindo.
+ */
+function selo(tx: TransactionDTO, parcelas: TransactionDTO[] | null) {
+  const compensada = parcelas ? parcelas.every((p) => p.compensationId) : !!tx.compensationId;
+  if (!compensada) return null;
+
+  return (
+    <span
+      title="Compensada por um estorno — fora dos totais"
+      className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-chip bg-surface-sunken border border-border text-text-disabled"
+    >
+      compensado
+    </span>
+  );
+}
+
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isUncategorizedParam = searchParams.get("uncategorized") === "true";
@@ -680,6 +704,7 @@ export function TransactionsPage() {
                                 {tx.description}
                               </span>
                               <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
+                              {selo(tx, parcelas)}
                             </div>
                             {tx.note && (
                               <div className="text-[11px] text-text-disabled truncate">
@@ -767,6 +792,7 @@ export function TransactionsPage() {
                                   {tx.description}
                                 </span>
                                 <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
+                                {selo(tx, parcelas)}
                               </div>
                               {tx.note && (
                                 <div className="text-[11px] text-text-disabled truncate">
@@ -853,6 +879,7 @@ export function TransactionsPage() {
         onUpdated={(updated) => {
           setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
         }}
+        onReload={() => void loadData()}
       />
     </div>
   );
