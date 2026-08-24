@@ -205,6 +205,27 @@ model Transaction {
   /// Pluggy quando o conector e Open Finance; senao e derivado do mes da
   /// transacao. Nulo fora de cartao de credito.
   billMonth           String?
+  /// O mes em que a transacao **conta** — o 1o dia dele, sempre. Igual a `date`
+  /// para quase tudo; para transacao de cartao e o mes da fatura, porque e la
+  /// que a despesa pesa no orcamento, e nao no dia da compra.
+  ///
+  /// Guarda o primeiro dia do mes, e nao o vencimento, de proposito: assim a
+  /// coluna nao depende de `Account.creditCardDueDay`, e mudar o dia do cartao
+  /// continua sem exigir backfill. A data de vencimento exibida segue derivada
+  /// na leitura.
+  ///
+  /// Nao e nula porque nulo obrigaria cada consumidor a decidir o que fazer com
+  /// a ausencia — o mesmo problema que `SystemCategoryKey` resolveu para
+  /// `categoryId`.
+  competenceDate      DateTime
+  /// A data original da compra, quando a Pluggy a informa. Num parcelamento as
+  /// N parcelas chegam com a mesma `date`, entao e isto que amarra as parcelas
+  /// a uma compra — e o que permite dizer "comprado em 03/08" numa parcela que
+  /// so vence em maio.
+  purchaseDate        DateTime?
+  /// Junta as parcelas de uma mesma compra. Derivada (ver lib/purchaseKey.ts),
+  /// porque a Pluggy nao manda identificador de compra nenhum.
+  purchaseKey         String?
   /// Une as duas pontas de uma transferência interna detectada. Torna o
   /// pareamento idempotente e permite desfazer nas duas pontas de uma vez.
   transferPairId      String?
@@ -217,8 +238,10 @@ model Transaction {
   suggestion CategorySuggestion?
 
   @@index([userId, date])
+  @@index([userId, competenceDate])
   @@index([categoryId])
   @@index([transferPairId])
+  @@index([purchaseKey])
 }
 
 model Budget {
