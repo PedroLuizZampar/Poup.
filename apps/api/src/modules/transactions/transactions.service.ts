@@ -11,6 +11,7 @@ import {
   TransactionNotFoundError,
 } from "../../lib/errors";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import { vencimentoDaFatura } from "../../lib/pluggyMapping";
 import { reopenPendingSuggestion } from "../categorization/categorization.service";
 
 export { AccountNotFoundError, CategoryNotFoundError, TransactionNotFoundError };
@@ -49,7 +50,18 @@ export interface UpdateTransactionInput {
   isRecurring?: boolean;
 }
 
-function formatTransactionDTO(tx: {
+/**
+ * O `include` de toda leitura de transacao. Existe como constante porque o
+ * `creditCardDueDay` precisa vir junto em **todas** elas: sem ele o DTO nao tem
+ * como calcular o vencimento, e a parcela apareceria sem data em algumas telas
+ * e com data em outras.
+ */
+export const TX_INCLUDE = {
+  account: { select: { name: true, creditCardDueDay: true } },
+  category: { select: { name: true } },
+} as const;
+
+export function formatTransactionDTO(tx: {
   id: string;
   description: string;
   amount: Prisma.Decimal;
@@ -58,9 +70,12 @@ function formatTransactionDTO(tx: {
   note: string | null;
   isRecurring: boolean;
   accountId: string;
-  account: { name: string };
+  account: { name: string; creditCardDueDay: number | null };
   categoryId: string | null;
   category: { name: string } | null;
+  installmentIndex: number | null;
+  installmentTotal: number | null;
+  billMonth: string | null;
 }): TransactionDTO {
   return {
     id: tx.id,
@@ -74,6 +89,11 @@ function formatTransactionDTO(tx: {
     accountName: tx.account.name,
     categoryId: tx.categoryId,
     categoryName: tx.category?.name ?? null,
+    installmentIndex: tx.installmentIndex,
+    installmentTotal: tx.installmentTotal,
+    // Derivado, nao guardado: o dia de vencimento mora na conta, e mudar la tem
+    // de consertar todas as parcelas de uma vez.
+    dueDate: vencimentoDaFatura(tx.billMonth, tx.account.creditCardDueDay)?.toISOString() ?? null,
   };
 }
 
@@ -155,10 +175,7 @@ export async function listTransactions(
 
   const transactions = await prisma.transaction.findMany({
     where,
-    include: {
-      account: { select: { name: true } },
-      category: { select: { name: true } },
-    },
+    include: TX_INCLUDE,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     ...(filters.limit ? { take: filters.limit } : {}),
   });
@@ -172,10 +189,7 @@ export async function getTransactionById(
 ): Promise<TransactionDTO | null> {
   const tx = await prisma.transaction.findFirst({
     where: { id, userId },
-    include: {
-      account: { select: { name: true } },
-      category: { select: { name: true } },
-    },
+    include: TX_INCLUDE,
   });
 
   if (!tx) return null;
@@ -223,10 +237,7 @@ export async function createTransaction(
       note: input.note?.trim() ?? null,
       isRecurring: input.isRecurring ?? false,
     },
-    include: {
-      account: { select: { name: true } },
-      category: { select: { name: true } },
-    },
+    include: TX_INCLUDE,
   });
 
   // Lançamento manual sem categoria é uma decisão adiada como qualquer outra: a
@@ -307,10 +318,7 @@ export async function updateTransaction(
       ...(input.note !== undefined && { note: input.note ? input.note.trim() : null }),
       ...(input.isRecurring !== undefined && { isRecurring: input.isRecurring }),
     },
-    include: {
-      account: { select: { name: true } },
-      category: { select: { name: true } },
-    },
+    include: TX_INCLUDE,
   });
 
   if (voltouParaAFila) {

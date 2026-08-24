@@ -1,13 +1,9 @@
 import { Prisma, SuggestionSource, SuggestionStatus } from "@prisma/client";
 import { prisma } from "../../prisma";
-import type { SuggestionsResponse, TransactionDTO } from "@poup/shared";
+import type { SuggestionsResponse } from "@poup/shared";
 import { CategoryNotFoundError, SystemCategoryError } from "../../lib/errors";
 import { reevaluatePendingSuggestions } from "./categorization.service";
-
-const TX_INCLUDE = {
-  account: { select: { name: true } },
-  category: { select: { name: true } },
-} as const;
+import { TX_INCLUDE, formatTransactionDTO } from "../transactions/transactions.service";
 
 export async function countPendingSuggestions(userId: string): Promise<number> {
   return prisma.categorySuggestion.count({
@@ -31,19 +27,7 @@ export async function listPendingSuggestions(userId: string): Promise<Suggestion
 
   const suggestions = rows.map((row) => ({
     id: row.id,
-    transaction: {
-      id: row.transaction.id,
-      description: row.transaction.description,
-      amount: Number(row.transaction.amount),
-      type: row.transaction.type,
-      date: row.transaction.date.toISOString(),
-      note: row.transaction.note,
-      isRecurring: row.transaction.isRecurring,
-      accountId: row.transaction.accountId,
-      accountName: row.transaction.account.name,
-      categoryId: row.transaction.categoryId,
-      categoryName: row.transaction.category?.name ?? null,
-    } as TransactionDTO,
+    transaction: formatTransactionDTO(row.transaction),
     suggestedCategoryId: row.categoryId,
     suggestedCategoryName: row.category?.name ?? null,
     source: row.source,

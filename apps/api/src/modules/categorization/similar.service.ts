@@ -9,6 +9,7 @@ import {
 } from "../../lib/errors";
 import { ensureSystemCategories } from "../../lib/systemCategories";
 import { reevaluatePendingSuggestions } from "./categorization.service";
+import { TX_INCLUDE, formatTransactionDTO } from "../transactions/transactions.service";
 
 /**
  * Tetos deliberados: este é o único caminho que compara par a par em vez de
@@ -50,10 +51,7 @@ export async function findSimilarTransactions(
     },
     orderBy: { date: "desc" },
     take: MAX_CANDIDATES,
-    include: {
-      account: { select: { name: true } },
-      category: { select: { name: true } },
-    },
+    include: TX_INCLUDE,
   });
 
   const uncategorized: SimilarTransactionDTO[] = [];
@@ -64,20 +62,7 @@ export async function findSimilarTransactions(
     if (score < SIMILARITY_THRESHOLD) continue;
     if (tx.categoryId === categoryId) continue;
 
-    const dto: SimilarTransactionDTO = {
-      id: tx.id,
-      description: tx.description,
-      amount: Number(tx.amount),
-      type: tx.type,
-      date: tx.date.toISOString(),
-      note: tx.note,
-      isRecurring: tx.isRecurring,
-      accountId: tx.accountId,
-      accountName: tx.account.name,
-      categoryId: tx.categoryId,
-      categoryName: tx.category?.name ?? null,
-      score,
-    };
+    const dto: SimilarTransactionDTO = { ...formatTransactionDTO(tx), score };
 
     if (tx.categoryId && semCategoria.includes(tx.categoryId)) {
       uncategorized.push(dto);
