@@ -5,6 +5,7 @@ import { ItemStatus, AccountType, TransactionType, Prisma, type Item } from "@pr
 import type { ItemDTO, SyncItemResponse } from "@poup/shared";
 import { validateImageDataUrl } from "../../lib/imageDataUrl";
 import {
+  AccountNotFoundError,
   ConflictError,
   ItemNotFoundError,
   UnprocessableError,
@@ -538,4 +539,108 @@ export async function syncAllItems(userId: string): Promise<{
     transactionsSynced: totalTransactions,
     review: totalReview,
   };
+}
+
+export interface RepairResult {
+  /** Quantas transações a Pluggy devolveu para esta conta. */
+  examined: number;
+  /** Quantas linhas locais de fato mudaram. */
+  updated: number;
+}
+
+/**
+ * Reescreve o histórico já importado de **uma** conta com as regras de hoje.
+ *
+ * Existe porque a correção do sinal e os campos de parcela não alcançam
+ * sozinhos o que já está no banco: o sync só revisita trinta dias, e o resto
+ * ficaria para sempre com o estorno invertido e sem parcela.
+ *
+ * Duas restrições deliberadas:
+ *
+ * - **Só atualiza; nunca insere.** O primeiro sync de uma conexão traz de
+ *   propósito só o mês corrente, para caber no tempo da função. Um reparo que
+ *   importasse tudo que a Pluggy conhece encheria a fila de revisão com
+ *   centenas de transações antigas que ninguém pediu — deixaria de ser
+ *   "consertar o que está errado" e viraria "importar cinco anos de extrato".
+ * - **Uma conta por chamada.** O extrato completo não tem tamanho conhecido, e
+ *   o teto de uma função serverless é de sessenta segundos. Quem itera as
+ *   contas é a tela, uma requisição de cada vez.
+ *
+ * Não chama `processNewTransactions`: nenhuma sugestão nasce daqui, e nenhuma
+ * notificação é criada. É idempotente — rodar duas vezes na mesma conta
+ * devolve `updated: 0` na segunda.
+ */
+export async function repairAccount(userId: string, accountId: string): Promise<RepairResult> {
+  const account = await prisma.account.findFirst({
+    where: { id: accountId, userId },
+    select: { id: true, pluggyAccountId: true },
+  });
+
+  // O par (id, userId) é o que prova posse. Id sozinho não prova nada.
+  if (!account) {
+    throw new AccountNotFoundError();
+  }
+
+  if (!account.pluggyAccountId) {
+    throw new UnprocessableError(
+      "Esta conta não veio de uma conexão da Pluggy, então não há histórico a reparar."
+    );
+  }
+
+  const client = await getPluggyClientForUser(userId);
+
+  // Sem `dateFrom`: aqui o histórico inteiro é o ponto.
+  const transactions: PluggyTransaction[] = await client
+    .fetchAllTransactions(account.pluggyAccountId)
+    .catch((err: any) => {
+      throw new UpstreamError(`Erro ao buscar transações na Pluggy: ${err?.message}`, {
+        details: err?.message,
+      });
+    });
+
+  if (transactions.length === 0) {
+    return { examined: 0, updated: 0 };
+  }
+
+  const existentes = await buscarPorPluggyIds(transactions.map((t) => t.id));
+  const existentePorPluggyId = new Map(
+    existentes.map((t) => [t.pluggyTransactionId!, t] as const)
+  );
+
+  const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
+
+  for (const pTx of transactions) {
+    const existente = existentePorPluggyId.get(pTx.id);
+    if (!existente) continue;
+
+    const campos = {
+      description: (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim(),
+      amount: new Prisma.Decimal(valorAbsoluto(pTx.amount)),
+      type: sinalDaTransacao(pTx.type, pTx.amount) as TransactionType,
+      date: new Date(pTx.date),
+      accountId: account.id,
+      ...dadosDeParcela(pTx),
+    };
+
+    if (
+      existente.description === campos.description &&
+      existente.amount.equals(campos.amount) &&
+      existente.type === campos.type &&
+      existente.date.getTime() === campos.date.getTime() &&
+      existente.accountId === campos.accountId &&
+      existente.installmentIndex === campos.installmentIndex &&
+      existente.installmentTotal === campos.installmentTotal &&
+      existente.billMonth === campos.billMonth
+    ) {
+      continue;
+    }
+
+    alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));
+  }
+
+  for (const lote of emLotes(alteracoes)) {
+    await prisma.$transaction(lote);
+  }
+
+  return { examined: transactions.length, updated: alteracoes.length };
 }

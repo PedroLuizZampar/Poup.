@@ -7,6 +7,7 @@ import {
   listItems,
   deleteItem,
   updateItemImage,
+  repairAccount,
 } from "./pluggy.service";
 import { createReviewNotification } from "../notifications/notifications.service";
 import { requireAuth } from "../../middleware/requireAuth";
@@ -70,6 +71,19 @@ pluggyRouter.patch(
     const { imageUrl } = updateItemImageSchema.parse(req.body);
     const item = await updateItemImage(req.userId!, req.params.id, imageUrl);
     res.json({ item });
+  })
+);
+
+/**
+ * Reparo do histórico, uma conta por vez. O corte por conta não é detalhe de
+ * implementação: é o que mantém cada requisição dentro do teto de tempo da
+ * função. Quem itera as contas de uma conexão é a tela.
+ */
+pluggyRouter.post(
+  "/accounts/:accountId/repair",
+  asyncHandler(async (req, res) => {
+    const result = await repairAccount(req.userId!, req.params.accountId);
+    res.json(result);
   })
 );
 
