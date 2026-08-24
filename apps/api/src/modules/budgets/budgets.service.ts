@@ -40,6 +40,11 @@ export async function listBudgets(userId: string, monthStr?: string): Promise<Bu
       userId,
       type: "EXPENSE",
       categoryId: { in: categoryIds },
+      // Compra compensada não consome orçamento. Aqui a exclusão precisa ser
+      // explícita: diferente de transferência, que fica de fora porque
+      // categoria de sistema nunca tem orçamento, a compra compensada mantém a
+      // categoria original.
+      compensationId: null,
       // O orçamento do mês é sobre o que conta naquele mês: a parcela pesa na
       // fatura dela, e não toda de uma vez no dia da compra.
       competenceDate: {
@@ -128,6 +133,7 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
       userId,
       categoryId,
       type: "EXPENSE",
+      compensationId: null,
       competenceDate: { gte: startOfMonth, lt: startOfNextMonth },
     },
     _sum: { amount: true },

@@ -106,7 +106,14 @@ function toCents(value: Prisma.Decimal | number | null | undefined): number {
 async function totalsByType(userId: string, period: ResolvedPeriod, transferId: string) {
   const grouped = await prisma.transaction.groupBy({
     by: ["type"],
-    where: { userId, NOT: { categoryId: transferId }, ...dateFilter(period) },
+    where: {
+      userId,
+      NOT: { categoryId: transferId },
+      // Compra compensada por um estorno nao foi gasta, e o credito que a
+      // cancelou nao foi ganho: as duas pontas saem dos totais.
+      compensationId: null,
+      ...dateFilter(period),
+    },
     _sum: { amount: true },
     _count: { _all: true },
   });
@@ -142,6 +149,7 @@ async function expensesByCategory(
       userId,
       type: "EXPENSE",
       NOT: { categoryId: transferId },
+      compensationId: null,
       ...dateFilter(period),
     },
     _sum: { amount: true },
@@ -244,6 +252,7 @@ async function monthlySeries(
       AND "competenceDate" >= ${start}
       AND "competenceDate" < ${end}
       AND "categoryId" IS DISTINCT FROM ${transferId}
+      AND "compensationId" IS NULL
     GROUP BY 1, 2
   `;
 
