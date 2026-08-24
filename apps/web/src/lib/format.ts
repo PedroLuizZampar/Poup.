@@ -16,13 +16,35 @@ export function formatCurrency(amount: number, options?: { showSign?: boolean })
   return amount < 0 ? `- ${formatted}` : formatted;
 }
 
+/**
+ * O dia de uma data, em UTC.
+ *
+ * UTC e nao o fuso do navegador porque o app inteiro decide dia e mes em UTC:
+ * `competenceDate`, o vencimento derivado da fatura e o recorte mensal dos
+ * relatorios sao todos calculados com `Date.UTC`. Formatar no fuso local
+ * atrasava em um dia toda data gravada a meia-noite UTC — o vencimento
+ * `2026-09-10T00:00:00Z` aparecia como 09/09 em GMT-3, e o app discordava da
+ * propria API.
+ *
+ * O mesmo vale para as datas que tem hora: exibir o dia local faria uma compra
+ * das 21h30 de 31/08 aparecer em agosto e contar em setembro.
+ *
+ * `formatDateTime` fica no fuso local de proposito — ver a nota la.
+ */
 export function formatDate(dateVal: string | Date): string {
   if (!dateVal) return "";
   const date = typeof dateVal === "string" ? new Date(dateVal) : dateVal;
   if (isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("pt-BR");
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
+/**
+ * Data e hora no fuso do usuario — e nao em UTC, como `formatDate`.
+ *
+ * A diferenca nao e descuido: aqui o que se mostra e um instante real
+ * (`lastSyncedAt`, `createdAt`), e quem sincronizou as 21h quer ler 21h no
+ * relogio dele. Dia de calendario e uma coisa; momento no tempo e outra.
+ */
 export function formatDateTime(dateVal: string | Date): string {
   if (!dateVal) return "";
   const date = typeof dateVal === "string" ? new Date(dateVal) : dateVal;

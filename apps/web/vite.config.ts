@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
@@ -79,6 +80,17 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    /*
+     * O fuso dos testes e fixo, e nao o da maquina de quem roda.
+     *
+     * Datas de dia inteiro sao gravadas a meia-noite UTC; formata-las no fuso
+     * local as atrasa em um dia a oeste de Greenwich. Se o teste rodasse em
+     * UTC, o bug passaria despercebido — que e exatamente como ele chegou ate
+     * aqui.
+     */
+    env: { TZ: "America/Sao_Paulo" },
+  },
   server: {
     // Escuta em todas as interfaces para o app abrir tambem pelo IP da rede.
     host: true,
