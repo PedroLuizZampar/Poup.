@@ -1,6 +1,7 @@
 import type { Account as PluggyAccount, Transaction as PluggyTransaction } from "pluggy-sdk";
 import { getPluggyClientForUser } from "../../lib/pluggy";
 import { prisma } from "../../prisma";
+import { reconhecerPagamentos, sincronizarFaturas } from "../bills/bills.service";
 import { ItemStatus, AccountType, TransactionType, Prisma, type Item } from "@prisma/client";
 import type { ItemDTO, SyncItemResponse } from "@poup/shared";
 import { validateImageDataUrl } from "../../lib/imageDataUrl";
@@ -417,6 +418,12 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
       });
     }
 
+    // Fatura só existe em conta de crédito, e é uma chamada a mais por conta:
+    // por isso só para elas.
+    if (tipoDaConta === AccountType.CREDIT) {
+      await sincronizarFaturas(client, userId, accountRecord.id, pAccount.id);
+    }
+
     accountsSynced++;
 
     // 5. Transações da conta, via cursor pagination (v2)
@@ -492,6 +499,15 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
   }
 
   const review = await processNewTransactions(userId, idsNovos);
+
+  // Depois de tudo importado: as duas pontas de um pagamento moram em contas
+  // diferentes e podem ter chegado em sincronizações diferentes.
+  await reconhecerPagamentos(userId).catch((err: any) => {
+    // Reconhecimento é melhoria, não requisito: falhar aqui não pode desfazer
+    // um sync que já gravou tudo.
+    console.warn(`Erro ao reconhecer pagamentos de fatura:`, err?.message || err);
+    return 0;
+  });
 
   return {
     item: toItemDTO(itemRecord),
