@@ -119,7 +119,11 @@ export async function listTransactions(
     if (!isNaN(year) && !isNaN(month)) {
       const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
       const startOfNextMonth = new Date(Date.UTC(year, month, 1, 0, 0, 0));
-      where.date = {
+      // O mês da lista é o mês em que a despesa **conta** — a parcela aparece
+      // na fatura dela, não no dia da compra. O filtro por intervalo de datas,
+      // logo abaixo, continua na data real de propósito: quem digita um
+      // intervalo está procurando quando algo aconteceu.
+      where.competenceDate = {
         gte: startOfMonth,
         lt: startOfNextMonth,
       };
@@ -233,6 +237,9 @@ export async function createTransaction(
       amount: new Prisma.Decimal(input.amount),
       type: input.type as PrismaTransactionType,
       date: new Date(input.date),
+      // Lançamento manual não tem fatura: competência é o próprio dia. Quando
+      // parcela manual existir, é aqui que ela vai divergir.
+      competenceDate: new Date(input.date),
       categoryId,
       note: input.note?.trim() ?? null,
       isRecurring: input.isRecurring ?? false,

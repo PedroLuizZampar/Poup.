@@ -40,7 +40,9 @@ export async function listBudgets(userId: string, monthStr?: string): Promise<Bu
       userId,
       type: "EXPENSE",
       categoryId: { in: categoryIds },
-      date: {
+      // O orçamento do mês é sobre o que conta naquele mês: a parcela pesa na
+      // fatura dela, e não toda de uma vez no dia da compra.
+      competenceDate: {
         gte: startOfMonth,
         lt: startOfNextMonth,
       },
@@ -126,7 +128,7 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
       userId,
       categoryId,
       type: "EXPENSE",
-      date: { gte: startOfMonth, lt: startOfNextMonth },
+      competenceDate: { gte: startOfMonth, lt: startOfNextMonth },
     },
     _sum: { amount: true },
   });

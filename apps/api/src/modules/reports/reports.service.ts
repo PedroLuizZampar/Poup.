@@ -75,10 +75,17 @@ function resolvePeriod(options: {
   }
 }
 
+/**
+ * A janela do periodo, sobre a competencia.
+ *
+ * Competencia e nao `date` porque uma compra em 10x tem as dez parcelas com a
+ * data da compra: somar por `date` colocaria os R$ 300 inteiros no mes em que se
+ * comprou, em vez de R$ 30 em cada uma das dez faturas.
+ */
 function dateFilter(period: ResolvedPeriod): Prisma.TransactionWhereInput {
   if (!period.start && !period.end) return {};
   return {
-    date: {
+    competenceDate: {
       ...(period.start ? { gte: period.start } : {}),
       ...(period.end ? { lt: period.end } : {}),
     },
@@ -229,13 +236,13 @@ async function monthlySeries(
   const end = startOfMonthUTC(last.year, last.month + 1);
 
   const rows = await prisma.$queryRaw<MonthlyRow[]>`
-    SELECT to_char(date_trunc('month', "date" AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
+    SELECT to_char(date_trunc('month', "competenceDate" AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
            "type"::text AS type,
            SUM("amount") AS total
     FROM "Transaction"
     WHERE "userId" = ${userId}
-      AND "date" >= ${start}
-      AND "date" < ${end}
+      AND "competenceDate" >= ${start}
+      AND "competenceDate" < ${end}
       AND "categoryId" IS DISTINCT FROM ${transferId}
     GROUP BY 1, 2
   `;
