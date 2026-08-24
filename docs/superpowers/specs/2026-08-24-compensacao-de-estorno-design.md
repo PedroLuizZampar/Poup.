@@ -255,8 +255,10 @@ desfazer limpa o grupo inteiro a partir de qualquer ponta.
 **De regressão**: uma linha compensada sobrevive a `syncItem`, a `repairAccount`
 e a `sincronizarPorIds`.
 
-**De exclusão**: as quatro consultas ignoram linha compensada — a do orçamento
-inclusive.
+**De exclusão**: as cinco consultas ignoram linha compensada — as duas de
+orçamento inclusive. O teste olha o `where` que cada consulta monta, e não o
+resultado: é o que faz a asserção valer sem banco, e o que a mantém honesta
+quando alguém adicionar uma consulta nova.
 
 ## Riscos
 
