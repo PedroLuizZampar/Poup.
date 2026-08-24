@@ -28,6 +28,7 @@ import type {
   ApplySuggestionsPayload,
   SuggestionsResponse,
   SimilarTransactionsResponse,
+  InstallmentsResponse,
 } from "@poup/shared";
 
 /**
@@ -261,6 +262,16 @@ export async function fetchTransactions(query?: TransactionFilterQuery): Promise
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await request<{ transactions: TransactionDTO[] }>(`/transactions${queryString}`);
   return res.transactions;
+}
+
+/**
+ * As parcelas da compra a que a transação pertence. Só é chamada quando o
+ * usuário abre o dropdown — a lista mensal traz uma parcela por compra.
+ */
+export async function fetchInstallments(
+  transactionId: string
+): Promise<InstallmentsResponse> {
+  return request<InstallmentsResponse>(`/transactions/${transactionId}/installments`);
 }
 
 export async function createTransaction(data: CreateTransactionRequest): Promise<TransactionDTO> {
