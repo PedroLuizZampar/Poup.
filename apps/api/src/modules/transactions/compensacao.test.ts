@@ -15,7 +15,9 @@ vi.mock("../../prisma", () => ({
   },
 }));
 
-const { compensar, desfazerCompensacao } = await import("./compensacao.service");
+const { compensar, desfazerCompensacao, detalheDaCompensacao } = await import(
+  "./compensacao.service"
+);
 
 const credito = {
   id: "tx-estorno",
@@ -134,5 +136,78 @@ describe("desfazerCompensacao", () => {
 
     expect(resultado.afetadas).toBe(0);
     expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("detalheDaCompensacao", () => {
+  const doGrupo = {
+    estorno: {
+      id: "tx-estorno",
+      description: "MERCADOLIVRE*MERCADOLIVRE",
+      type: "INCOME",
+      amount: { toString: () => "272" },
+      date: new Date("2026-08-21T00:00:00Z"),
+      purchaseKey: null,
+      installmentTotal: null,
+      purchaseDate: null,
+    },
+    parcelas: oitoParcelas.map((p, i) => ({
+      id: p.id,
+      description: "MERCADOLIVRE*MERCADOLIVRE",
+      type: "EXPENSE",
+      amount: { toString: () => "34" },
+      date: new Date("2026-08-17T00:00:00Z"),
+      purchaseKey: "chave-a",
+      installmentTotal: 8,
+      purchaseDate: new Date("2026-08-17T00:00:00Z"),
+      installmentIndex: i + 1,
+    })),
+  };
+
+  it("descreve as duas pontas do grupo", async () => {
+    findFirst.mockResolvedValue({ compensationId: "par-1" });
+    findMany.mockResolvedValue([doGrupo.estorno, ...doGrupo.parcelas]);
+
+    const { compensation } = await detalheDaCompensacao("user-1", "tx-estorno");
+
+    expect(compensation).not.toBeNull();
+    expect(compensation!.estorno).toMatchObject({ id: "tx-estorno", amount: 272 });
+    // O total da compra e a soma das parcelas, e nao o valor de uma delas: e o
+    // numero que a pessoa reconhece do extrato.
+    expect(compensation!.compra).toMatchObject({
+      description: "MERCADOLIVRE*MERCADOLIVRE",
+      total: 272,
+      installmentTotal: 8,
+      parcelasConhecidas: 8,
+    });
+  });
+
+  it("busca o grupo pelo vínculo, e não pela transação pedida", async () => {
+    // Perguntar por uma parcela tem de devolver o mesmo grupo que perguntar
+    // pelo crédito: e o `compensationId` que define o conjunto.
+    findFirst.mockResolvedValue({ compensationId: "par-1" });
+    findMany.mockResolvedValue([doGrupo.estorno, ...doGrupo.parcelas]);
+
+    await detalheDaCompensacao("user-1", "p3");
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      userId: "user-1",
+      compensationId: "par-1",
+    });
+  });
+
+  it("transação não compensada não tem detalhe nenhum", async () => {
+    findFirst.mockResolvedValue({ compensationId: null });
+
+    expect(await detalheDaCompensacao("user-1", "tx-estorno")).toEqual({
+      compensation: null,
+    });
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("transação de outro usuário não existe", async () => {
+    findFirst.mockResolvedValue(null);
+
+    await expect(detalheDaCompensacao("user-1", "tx-de-outro")).rejects.toThrow();
   });
 });

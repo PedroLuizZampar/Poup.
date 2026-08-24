@@ -30,28 +30,41 @@ function formatDay(day: string): string {
 }
 
 /**
- * O selo de compensada, para a linha da lista.
+ * Se a linha da lista está compensada.
  *
  * `agruparCompras` reúne as parcelas que passam pelos filtros numa linha só,
  * então o estado é da linha e não de uma transação solta: uma compra
- * compensada aparece como **uma** linha com selo, e não como oito.
+ * compensada aparece como **uma** linha, e não como oito.
  *
  * `every` e não `some`: grupo meio compensado não existe — o servidor recusa —,
- * mas se existisse o selo estaria mentindo.
+ * mas se existisse a marcação estaria mentindo.
  */
-function selo(tx: TransactionDTO, parcelas: TransactionDTO[] | null) {
-  const compensada = parcelas ? parcelas.every((p) => p.compensationId) : !!tx.compensationId;
+function estaCompensada(tx: TransactionDTO, parcelas: TransactionDTO[] | null) {
+  return parcelas ? parcelas.every((p) => p.compensationId) : !!tx.compensationId;
+}
+
+function selo(compensada: boolean) {
   if (!compensada) return null;
 
   return (
     <span
       title="Compensada por um estorno — fora dos totais"
-      className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-chip bg-surface-sunken border border-border text-text-disabled"
+      className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-chip bg-surface-sunken border border-border text-text-secondary"
     >
-      compensado
+      Compensado
     </span>
   );
 }
+
+/**
+ * Como uma linha compensada se apresenta: apagada e riscada.
+ *
+ * O risco é a afirmação — este valor não conta mais —, e o apagado é o que tira
+ * a linha do primeiro plano sem escondê-la, porque é por ela que se desfaz a
+ * compensação. A dose é leve de propósito: sumir seria mentira, já que a
+ * transação continua no extrato do banco.
+ */
+const RISCADO = "line-through decoration-text-disabled";
 
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -684,12 +697,15 @@ export function TransactionsPage() {
             <ul className="md:hidden divide-y divide-border">
               {linhas.map(({ tx, parcelas, valor }) => {
                 const cat = displayCategory(tx.categoryId ? categoryMap[tx.categoryId] : null);
+                const compensada = estaCompensada(tx, parcelas);
                 return (
                   <li key={tx.id}>
                     <button
                       type="button"
                       onClick={() => setSelectedTx(tx)}
-                      className="w-full text-left px-4 py-3.5 flex flex-col gap-2 active:bg-surface-alt transition-colors focus-ring cursor-pointer"
+                      className={`w-full text-left px-4 py-3.5 flex flex-col gap-2 active:bg-surface-alt transition-colors focus-ring cursor-pointer ${
+                        compensada ? "opacity-65" : ""
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-3 min-w-0">
@@ -700,11 +716,15 @@ export function TransactionsPage() {
                           />
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                              <span className="font-semibold text-sm text-text-primary truncate">
+                              <span
+                                className={`font-semibold text-sm truncate ${
+                                  compensada ? `text-text-secondary ${RISCADO}` : "text-text-primary"
+                                }`}
+                              >
                                 {tx.description}
                               </span>
                               <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
-                              {selo(tx, parcelas)}
+                              {selo(compensada)}
                             </div>
                             {tx.note && (
                               <div className="text-[11px] text-text-disabled truncate">
@@ -738,7 +758,7 @@ export function TransactionsPage() {
                         <span
                           className={`font-display font-bold text-sm shrink-0 tnum ${
                             tx.type === "INCOME" ? "text-income" : "text-expense"
-                          }`}
+                          } ${compensada ? RISCADO : ""}`}
                         >
                           {tx.type === "INCOME" ? "+ " : "- "}
                           <Money value={valor} />
@@ -771,13 +791,16 @@ export function TransactionsPage() {
                     const cat = displayCategory(
                       tx.categoryId ? categoryMap[tx.categoryId] : null
                     );
+                    const compensada = estaCompensada(tx, parcelas);
                     return (
                       <tr
                         key={tx.id}
                         tabIndex={0}
                         onClick={() => setSelectedTx(tx)}
                         onKeyDown={(e) => handleRowKeyDown(e, tx)}
-                        className="hover:bg-surface-alt/60 transition-colors cursor-pointer focus-ring"
+                        className={`hover:bg-surface-alt/60 transition-colors cursor-pointer focus-ring ${
+                          compensada ? "opacity-65" : ""
+                        }`}
                       >
                         <td className="py-3.5 px-6 max-w-0">
                           <div className="flex items-center gap-3">
@@ -788,11 +811,17 @@ export function TransactionsPage() {
                             />
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                                <span className="font-semibold text-xs md:text-sm text-text-primary truncate">
+                                <span
+                                  className={`font-semibold text-xs md:text-sm truncate ${
+                                    compensada
+                                      ? `text-text-secondary ${RISCADO}`
+                                      : "text-text-primary"
+                                  }`}
+                                >
                                   {tx.description}
                                 </span>
                                 <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
-                                {selo(tx, parcelas)}
+                                {selo(compensada)}
                               </div>
                               {tx.note && (
                                 <div className="text-[11px] text-text-disabled truncate">
@@ -830,7 +859,7 @@ export function TransactionsPage() {
                         <td
                           className={`py-3.5 px-6 text-right font-display font-bold text-xs md:text-sm whitespace-nowrap tnum ${
                             tx.type === "INCOME" ? "text-income" : "text-expense"
-                          }`}
+                          } ${compensada ? RISCADO : ""}`}
                         >
                           {tx.type === "INCOME" ? "+ " : "- "}
                           <Money value={valor} />

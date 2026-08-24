@@ -30,6 +30,7 @@ import type {
   SimilarTransactionsResponse,
   InstallmentsResponse,
   CompensationCandidatesResponse,
+  CompensationDetailResponse,
 } from "@poup/shared";
 
 /**
@@ -285,6 +286,19 @@ export async function fetchCompensationCandidates(
 ): Promise<CompensationCandidatesResponse> {
   return request<CompensationCandidatesResponse>(
     `/transactions/${transactionId}/compensation/candidates`
+  );
+}
+
+/**
+ * As duas pontas de uma compensação já feita — para a tela poder dizer *qual*
+ * compra o estorno cancelou. Serve tanto ao crédito quanto a uma parcela: o
+ * grupo é o mesmo.
+ */
+export async function fetchCompensationDetail(
+  transactionId: string
+): Promise<CompensationDetailResponse> {
+  return request<CompensationDetailResponse>(
+    `/transactions/${transactionId}/compensation`
   );
 }
 

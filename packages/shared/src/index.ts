@@ -134,6 +134,35 @@ export interface CompensateRequest {
   purchaseKey: string;
 }
 
+/**
+ * As duas pontas de uma compensacao ja feita, para a tela poder dizer *qual*
+ * compra aquele estorno cancelou — e nao so que cancelou alguma.
+ */
+export interface CompensationDetailDTO {
+  /** A ponta credito: o estorno que o banco lancou. */
+  estorno: {
+    id: string;
+    description: string;
+    amount: number;
+    date: string;
+  };
+  /** A compra parcelada que o estorno cancela, somada. */
+  compra: {
+    purchaseKey: string | null;
+    description: string;
+    /** A soma das parcelas — o valor da compra, e nao o de uma parcela. */
+    total: number;
+    installmentTotal: number | null;
+    parcelasConhecidas: number;
+    purchaseDate: string | null;
+  };
+}
+
+export interface CompensationDetailResponse {
+  /** Null quando a transacao pedida nao esta compensada. */
+  compensation: CompensationDetailDTO | null;
+}
+
 export interface BudgetDTO {
   id: string;
   categoryId: string;

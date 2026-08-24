@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type {
   CompensationCandidateDTO,
   CompensationCandidatesResponse,
+  CompensationDetailResponse,
 } from "@poup/shared";
 import { prisma } from "../../prisma";
 import { candidatasDeCompensacao, type GrupoDeCompra } from "../../lib/compensacao";
@@ -212,4 +213,72 @@ export async function desfazerCompensacao(
   });
 
   return { afetadas: count };
+}
+
+/**
+ * As duas pontas de uma compensacao ja feita.
+ *
+ * Serve a pergunta que a faixa "Compensado" deixava no ar: *qual* compra este
+ * credito cancelou? Endpoint proprio, e nao campo no DTO da lista, pelo mesmo
+ * motivo de `/:id/installments`: so interessa quando alguem abre a transacao.
+ *
+ * O grupo vem pelo `compensationId`, e nao pela transacao pedida — perguntar
+ * por uma parcela devolve o mesmo que perguntar pelo credito.
+ */
+export async function detalheDaCompensacao(
+  userId: string,
+  transactionId: string
+): Promise<CompensationDetailResponse> {
+  const tx = await prisma.transaction.findFirst({
+    where: { id: transactionId, userId },
+    select: { compensationId: true },
+  });
+
+  if (!tx) throw new TransactionNotFoundError();
+  if (tx.compensationId === null) return { compensation: null };
+
+  const linhas = await prisma.transaction.findMany({
+    where: { userId, compensationId: tx.compensationId },
+    select: {
+      id: true,
+      description: true,
+      type: true,
+      amount: true,
+      date: true,
+      purchaseKey: true,
+      installmentTotal: true,
+      purchaseDate: true,
+    },
+  });
+
+  const estorno = linhas.find((l) => l.type === "INCOME");
+  const parcelas = linhas.filter((l) => l.type === "EXPENSE");
+
+  // Um grupo sem uma das pontas nao deveria existir: o servico so grava as duas
+  // juntas. Se existir, e melhor a tela nao mostrar nada do que mostrar meia
+  // verdade sobre onde o dinheiro foi parar.
+  if (!estorno || parcelas.length === 0) return { compensation: null };
+
+  const primeira = parcelas[0];
+
+  return {
+    compensation: {
+      estorno: {
+        id: estorno.id,
+        description: estorno.description,
+        amount: Number(estorno.amount),
+        date: estorno.date.toISOString(),
+      },
+      compra: {
+        purchaseKey: primeira.purchaseKey,
+        description: primeira.description,
+        // A soma das parcelas, e nao o valor de uma: e o numero que a pessoa
+        // reconhece do extrato, e o que tem de bater com o estorno.
+        total: parcelas.reduce((soma, p) => soma + centavos(p.amount), 0) / 100,
+        installmentTotal: primeira.installmentTotal,
+        parcelasConhecidas: parcelas.length,
+        purchaseDate: primeira.purchaseDate?.toISOString() ?? null,
+      },
+    },
+  };
 }

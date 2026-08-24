@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useMemo, FormEvent } from "react";
-import type { TransactionDTO, CategoryDTO } from "@poup/shared";
-import { undoCompensation, updateTransaction } from "../../lib/api";
+import type { TransactionDTO, CategoryDTO, CompensationDetailDTO } from "@poup/shared";
+import {
+  fetchCompensationDetail,
+  undoCompensation,
+  updateTransaction,
+} from "../../lib/api";
 import { Modal } from "../ui/Modal";
 import { Field } from "../ui/Field";
 import { Input } from "../ui/Input";
@@ -10,7 +14,7 @@ import { CategorySelectModal } from "../categories/CategorySelectModal";
 import { SimilarTransactionsModal } from "./SimilarTransactionsModal";
 import { CompensationModal } from "./CompensationModal";
 import { useToast } from "../ui/Toast";
-import { formatDate } from "../../lib/format";
+import { formatCurrency, formatDate } from "../../lib/format";
 import { useCategoryMap } from "../../hooks/useCategories";
 import { displayCategory } from "../../lib/categories";
 import { Money } from "../ui/Money";
@@ -44,6 +48,8 @@ export function TransactionDetailModal({
   const [loading, setLoading] = useState(false);
   const [isCompensationOpen, setIsCompensationOpen] = useState(false);
   const [undoing, setUndoing] = useState(false);
+  /** As duas pontas do vínculo, quando esta transação está compensada. */
+  const [compensacao, setCompensacao] = useState<CompensationDetailDTO | null>(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -53,6 +59,33 @@ export function TransactionDetailModal({
       setNote(transaction.note || "");
     }
   }, [transaction]);
+
+  /**
+   * Qual compra este estorno cancelou — ou, numa parcela, qual crédito a
+   * cancelou. Só é buscado quando há vínculo: a lista não carrega isso, porque
+   * só interessa a quem abriu a transação.
+   */
+  useEffect(() => {
+    if (!transaction?.compensationId) {
+      setCompensacao(null);
+      return;
+    }
+
+    let atual = true;
+    void (async () => {
+      try {
+        const { compensation } = await fetchCompensationDetail(transaction.id);
+        if (atual) setCompensacao(compensation);
+      } catch (err) {
+        console.error("Erro ao buscar o vínculo de compensação:", err);
+        if (atual) setCompensacao(null);
+      }
+    })();
+
+    return () => {
+      atual = false;
+    };
+  }, [transaction?.id, transaction?.compensationId]);
 
   const categoryMap = useCategoryMap(categories);
   // O mapa fica com todas para saber desenhar "Transferência entre contas";
@@ -66,6 +99,46 @@ export function TransactionDetailModal({
   // precisa marcá-la como "Sem categoria" em vez de não marcar nada.
   const currentCategory = displayCategory(categoryId ? categoryMap[categoryId] : null);
   const selectedInPicker = currentCategory?.id ?? null;
+
+  /**
+   * A outra ponta do vínculo, do ponto de vista de quem está aberto: no crédito
+   * mostra-se a compra; numa parcela, o crédito que a cancelou. Mostrar a
+   * própria linha de volta não diria nada.
+   */
+  const ehOEstorno = Boolean(
+    compensacao && transaction && compensacao.estorno.id === transaction.id
+  );
+
+  const contraparte = !compensacao
+    ? null
+    : ehOEstorno
+      ? {
+          description: compensacao.compra.description,
+          valor: compensacao.compra.total,
+          detalhe: [
+            compensacao.compra.installmentTotal
+              ? `${compensacao.compra.installmentTotal}x de ${formatCurrency(
+                  compensacao.compra.total / compensacao.compra.installmentTotal
+                )}`
+              : null,
+            compensacao.compra.purchaseDate
+              ? `comprado em ${formatDate(compensacao.compra.purchaseDate)}`
+              : null,
+            // Só aparece quando o histórico veio cortado: explica um total que a
+            // pessoa pode não reconhecer.
+            compensacao.compra.installmentTotal &&
+            compensacao.compra.parcelasConhecidas < compensacao.compra.installmentTotal
+              ? `${compensacao.compra.parcelasConhecidas} de ${compensacao.compra.installmentTotal} parcelas importadas`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }
+      : {
+          description: compensacao.estorno.description,
+          valor: compensacao.estorno.amount,
+          detalhe: `estorno de ${formatDate(compensacao.estorno.date)}`,
+        };
 
   if (!transaction) return null;
 
@@ -274,24 +347,53 @@ export function TransactionDetailModal({
             o estorno aparece na lista, e a pergunta seguinte é de onde ele veio.
             Compensada, a linha troca a ação pela faixa com o desfazer. */}
         {transaction.compensationId ? (
-          <div className="p-3.5 rounded-card bg-surface-alt/60 border border-border flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <span className="text-overline uppercase tracking-wider text-text-secondary block">
-                Compensado
-              </span>
-              <span className="text-xs text-text-secondary">
-                Esta linha e a compra que ela cancela estão fora de todos os totais.
-              </span>
+          <div className="p-3.5 rounded-card bg-surface-alt/60 border border-border flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-overline uppercase tracking-wider text-text-secondary block">
+                  Compensado
+                </span>
+                <span className="text-xs text-text-secondary">
+                  Esta linha e a compra que ela cancela estão fora de todos os totais.
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                loading={undoing}
+                onClick={() => void desfazer()}
+              >
+                Desfazer
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              loading={undoing}
-              onClick={() => void desfazer()}
-            >
-              Desfazer
-            </Button>
+
+            {/* A outra ponta, nomeada. Sem isto a faixa diz que houve uma
+                compensação sem dizer com o quê — e conferir exigiria caçar a
+                compra na lista. */}
+            {contraparte && (
+              <div className="pt-3 border-t border-border flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-overline uppercase tracking-wider text-text-secondary block">
+                    {ehOEstorno ? "Cancela a compra" : "Estornada pelo crédito"}
+                  </span>
+                  <span className="text-xs font-semibold text-text-primary block truncate">
+                    {contraparte.description}
+                  </span>
+                  <span className="text-[11px] text-text-secondary">
+                    {contraparte.detalhe}
+                  </span>
+                </div>
+                <span
+                  className={`font-display font-bold text-sm shrink-0 tnum ${
+                    ehOEstorno ? "text-expense" : "text-income"
+                  }`}
+                >
+                  {ehOEstorno ? "- " : "+ "}
+                  <Money value={contraparte.valor} />
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           transaction.type === "INCOME" && (

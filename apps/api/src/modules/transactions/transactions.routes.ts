@@ -14,6 +14,7 @@ import {
 import {
   compensar,
   desfazerCompensacao,
+  detalheDaCompensacao,
   listarCandidatas,
 } from "./compensacao.service";
 import { ForbiddenError, TransactionNotFoundError } from "../../lib/errors";
@@ -120,6 +121,13 @@ transactionsRouter.get(
   "/:id/compensation/candidates",
   asyncHandler(async (req, res) => {
     res.json(await listarCandidatas(req.userId!, req.params.id));
+  })
+);
+
+transactionsRouter.get(
+  "/:id/compensation",
+  asyncHandler(async (req, res) => {
+    res.json(await detalheDaCompensacao(req.userId!, req.params.id));
   })
 );
 
