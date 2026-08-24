@@ -333,3 +333,69 @@ export async function reopenPendingSuggestion(
     update: pendente,
   });
 }
+
+/**
+ * Devolve transacoes a fila de revisao porque o **app** mudou de ideia.
+ *
+ * Diferente de `reopenPendingSuggestion`, que atende a pessoa tirando a
+ * categoria a mao: ali `guessRejected` existe para nao devolver o palpite que
+ * ela acabou de recusar. Aqui ninguem recusou nada — foi o app que classificou
+ * errado e esta desfazendo —, entao a transacao volta com o melhor palpite que
+ * o historico souber dar, que e o que a torna resolvivel em um clique.
+ *
+ * `upsert`, e nao `createMany`: uma transacao mal classificada pode ja ter uma
+ * sugestao RESOLVED de antes, e uma linha resolvida nao aparece na fila.
+ */
+export async function enfileirarParaRevisao(
+  userId: string,
+  transactionIds: string[]
+): Promise<number> {
+  if (transactionIds.length === 0) return 0;
+
+  const systemIds = await ensureSystemCategories(prisma, userId);
+
+  for (const lote of emLotes(transactionIds)) {
+    await prisma.transaction.updateMany({
+      where: { id: { in: lote }, userId },
+      data: { categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED] },
+    });
+  }
+
+  const linhas = await buscarEmLotes(transactionIds, (lote) =>
+    prisma.transaction.findMany({
+      where: { id: { in: lote }, userId },
+      select: { id: true, description: true },
+    })
+  );
+
+  const ctx = await buildSuggestionContext(
+    userId,
+    new Set(Object.values(systemIds)),
+    linhas.map((t) => t.id)
+  );
+
+  const upserts = linhas.map((tx) => {
+    const palpite = suggestCategory({ description: tx.description }, ctx);
+    const pendente = {
+      categoryId: palpite?.categoryId ?? null,
+      source: (palpite?.source ?? "NONE") as SuggestionSource,
+      confidence: palpite?.confidence ?? 0,
+      status: SuggestionStatus.PENDING,
+      guessRejected: false,
+      resolvedCategoryId: null,
+      resolvedAt: null,
+    };
+
+    return prisma.categorySuggestion.upsert({
+      where: { transactionId: tx.id },
+      create: { userId, transactionId: tx.id, ...pendente },
+      update: pendente,
+    });
+  });
+
+  for (const lote of emLotes(upserts, LOTE)) {
+    await prisma.$transaction(lote);
+  }
+
+  return linhas.length;
+}

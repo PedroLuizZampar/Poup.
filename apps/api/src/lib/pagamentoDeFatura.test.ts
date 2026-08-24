@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { casarPagamentos, pagamentoQueQuita, parecePagamentoDeFatura } from "./pagamentoDeFatura";
+import {
+  casarPagamentos,
+  casarPontas,
+  casarPorDescricao,
+  pagamentoQueQuita,
+  parecePagamentoDeFatura,
+} from "./pagamentoDeFatura";
 
 const fatura = {
   billId: "fatura-1",
@@ -135,5 +141,147 @@ describe("pagamentoQueQuita", () => {
 
   it("fatura sem pagamento nao esta paga", () => {
     expect(pagamentoQueQuita([])).toBeNull();
+  });
+});
+
+describe("casarPorDescricao", () => {
+  const debitoDescrito = {
+    id: "tx-1",
+    accountId: "corrente-1",
+    date: new Date("2026-08-12T00:00:00Z"),
+    amount: 94.62,
+    description: "Pagamento Cartão de crédito",
+  };
+
+  const creditoNoCartao = {
+    id: "tx-cartao-1",
+    accountId: "cartao-1",
+    date: new Date("2026-08-12T00:00:00Z"),
+    amount: 94.62,
+  };
+
+  it("casa quando a outra ponta existe num cartao vinculado", () => {
+    // O conector do Inter nao devolve fatura nenhuma. O cartao dele esta
+    // vinculado, entao o credito da quitacao aparece no extrato do cartao — e e
+    // ele que autoriza a descricao a decidir.
+    expect(casarPorDescricao([debitoDescrito], [creditoNoCartao])).toEqual([
+      { debitoId: "tx-1", creditoId: "tx-cartao-1" },
+    ]);
+  });
+
+  it("nao casa sem contraparte nenhuma", () => {
+    // O caso real: "Pagamento Cartão de crédito" de R$ 94,62 no Mercado Pago,
+    // cujo cartao nao esta no app. Sem as duas pontas vinculadas a despesa e
+    // real, e marca-la como transferencia a apagaria dos relatorios.
+    expect(casarPorDescricao([debitoDescrito], [])).toEqual([]);
+  });
+
+  it("nao casa contraparte de valor diferente", () => {
+    expect(casarPorDescricao([debitoDescrito], [{ ...creditoNoCartao, amount: 94.61 }])).toEqual(
+      []
+    );
+  });
+
+  it("nao casa contraparte fora da janela de tres dias", () => {
+    const longe = { ...creditoNoCartao, date: new Date("2026-08-20T00:00:00Z") };
+    expect(casarPorDescricao([debitoDescrito], [longe])).toEqual([]);
+  });
+
+  it("casa dentro da janela de tres dias", () => {
+    const doisDiasDepois = { ...creditoNoCartao, date: new Date("2026-08-14T00:00:00Z") };
+    expect(casarPorDescricao([debitoDescrito], [doisDiasDepois])).toEqual([
+      { debitoId: "tx-1", creditoId: "tx-cartao-1" },
+    ]);
+  });
+
+  it("ignora o debito cuja descricao nao fala de fatura", () => {
+    // A contraparte sozinha nao basta: um credito de mesmo valor no cartao pode
+    // ser estorno de compra, e o debito do mesmo dia, uma despesa qualquer.
+    const aluguel = { ...debitoDescrito, description: "PAGAMENTO ALUGUEL" };
+    expect(casarPorDescricao([aluguel], [creditoNoCartao])).toEqual([]);
+  });
+
+  it("cada credito paga um debito so", () => {
+    // Dois debitos de mesmo valor e um credito so: casar os dois faria duas
+    // despesas sumirem por conta de um pagamento que aconteceu uma vez.
+    const outro = { ...debitoDescrito, id: "tx-2" };
+    expect(casarPorDescricao([debitoDescrito, outro], [creditoNoCartao])).toEqual([
+      { debitoId: "tx-1", creditoId: "tx-cartao-1" },
+    ]);
+  });
+
+  it("prefere o credito mais proximo, e isso decide quantos debitos casam", () => {
+    // Dois cartoes quitados no mesmo periodo. O credito de 12/08 alcanca o
+    // debito de 12/08 mas nao o de 16/08; o de 13/08 alcanca os dois.
+    //
+    // Se o primeiro debito ficar com o credito mais proximo (o de 12/08), sobra
+    // para o segundo o de 13/08, que ainda o alcanca — e os dois casam. Se ele
+    // ficar com o de 13/08, o segundo herda um credito fora da janela e nao
+    // casa. Por isso a preferencia por data nao e cosmetica: ela muda o
+    // resultado.
+    const emDoze = { ...creditoNoCartao, id: "cartao-12" };
+    const emTreze = {
+      ...creditoNoCartao,
+      id: "cartao-13",
+      date: new Date("2026-08-13T00:00:00Z"),
+    };
+    const seisDiasDepois = {
+      ...debitoDescrito,
+      id: "tx-2",
+      date: new Date("2026-08-16T00:00:00Z"),
+    };
+
+    expect(casarPorDescricao([debitoDescrito, seisDiasDepois], [emTreze, emDoze])).toEqual([
+      { debitoId: "tx-1", creditoId: "cartao-12" },
+      { debitoId: "tx-2", creditoId: "cartao-13" },
+    ]);
+  });
+
+  it("lista vazia nao quebra", () => {
+    expect(casarPorDescricao([], [creditoNoCartao])).toEqual([]);
+    expect(casarPorDescricao([debitoDescrito], [])).toEqual([]);
+  });
+});
+
+describe("casarPontas", () => {
+  const debito = {
+    id: "tx-1",
+    accountId: "corrente-1",
+    date: new Date("2026-08-12T00:00:00Z"),
+    amount: 94.62,
+  };
+
+  const credito = {
+    id: "tx-cartao-1",
+    accountId: "cartao-1",
+    date: new Date("2026-08-12T00:00:00Z"),
+    amount: 94.62,
+  };
+
+  it("devolve as duas pontas do mesmo pagamento", () => {
+    // Marcar so o debito deixava o credito do cartao contando como receita: no
+    // caso real o pagamento de R$ 94,62 abatia a despesa de um lado e entrava
+    // como dinheiro novo do outro.
+    expect(casarPontas([debito], [credito])).toEqual([
+      { debitoId: "tx-1", creditoId: "tx-cartao-1" },
+    ]);
+  });
+
+  it("nao exige descricao nenhuma", () => {
+    // Diferente da reserva por descricao: aqui quem reconheceu o debito foi a
+    // fatura, que ja e prova. A descricao pode ser qualquer coisa.
+    const mudo = { ...debito, description: "QUALQUER COISA" };
+    expect(casarPontas([mudo], [credito])).toHaveLength(1);
+  });
+
+  it("nao inventa contraparte quando ela nao existe", () => {
+    expect(casarPontas([debito], [])).toEqual([]);
+  });
+
+  it("um credito espelha um debito so", () => {
+    const outro = { ...debito, id: "tx-2" };
+    expect(casarPontas([debito, outro], [credito])).toEqual([
+      { debitoId: "tx-1", creditoId: "tx-cartao-1" },
+    ]);
   });
 });

@@ -14,7 +14,7 @@ export type AccountType =
 
 export type BudgetStatus = "ok" | "warning" | "exceeded";
 
-export type SystemCategoryKey = "TRANSFER" | "UNCATEGORIZED";
+export type SystemCategoryKey = "TRANSFER" | "UNCATEGORIZED" | "BILL_PAYMENT";
 
 /**
  * Fixa e o que se repete com o mesmo valor todo mes — aluguel, mensalidade,
@@ -102,11 +102,38 @@ export interface TransactionDTO {
   compensationId: string | null;
 }
 
+/**
+ * Em que pe esta uma parcela.
+ *
+ * Sai do cruzamento da parcela com a fatura em que ela caiu, e nunca de
+ * deducao: `FORECAST` cobre tanto a parcela que ainda nao foi para fatura
+ * nenhuma quanto aquela cuja fatura o conector nao entrega. Chamar de vencida
+ * uma parcela so porque a data passou pintaria de vermelho todo cartao cuja
+ * fatura o app nao conseguiu importar.
+ */
+export type InstallmentStatus =
+  /** A fatura em que ela caiu esta quitada. */
+  | "PAID"
+  /** A fatura fechou, o vencimento passou e ela nao consta como paga. */
+  | "OVERDUE"
+  /** Ja esta numa fatura, que ainda vai vencer. */
+  | "OPEN"
+  /** Ainda nao foi para fatura nenhuma — ou a fatura nao chegou ao app. */
+  | "FORECAST";
+
+export interface InstallmentDTO extends TransactionDTO {
+  status: InstallmentStatus;
+  /** Quando a fatura desta parcela foi quitada (ISO). Null fora de `PAID`. */
+  paidAt: string | null;
+}
+
 export interface InstallmentsResponse {
   /** As parcelas da compra, ordenadas por numero. */
-  installments: TransactionDTO[];
+  installments: InstallmentDTO[];
   /** A soma das parcelas conhecidas — o valor da compra. */
   total: number;
+  /** A soma das que ja estao pagas. */
+  paidTotal: number;
 }
 
 export type CompensationIneligibleReason = "valor-diferente" | "ja-compensado";

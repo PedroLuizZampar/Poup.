@@ -99,16 +99,20 @@ function toCents(value: Prisma.Decimal | number | null | undefined): number {
 }
 
 /**
- * Transferência entre contas do próprio usuário não é gasto nem receita: o
- * dinheiro só mudou de bolso. Contá-la infla os dois lados do mesmo mês e
- * estraga a taxa de poupança.
+ * Transferência entre contas e pagamento de fatura não são gasto nem receita: no
+ * primeiro o dinheiro só mudou de bolso; no segundo a despesa já foi contada na
+ * compra que gerou a fatura. Contar qualquer um dos dois infla os dois lados do
+ * mesmo mês e estraga a taxa de poupança.
+ *
+ * São duas categorias distintas porque a pessoa precisa distinguir uma da outra
+ * na lista — mas, para todo total, valem a mesma coisa: ficam de fora.
  */
-async function totalsByType(userId: string, period: ResolvedPeriod, transferId: string) {
+async function totalsByType(userId: string, period: ResolvedPeriod, ocultas: string[]) {
   const grouped = await prisma.transaction.groupBy({
     by: ["type"],
     where: {
       userId,
-      NOT: { categoryId: transferId },
+      NOT: { categoryId: { in: ocultas } },
       // Compra compensada por um estorno nao foi gasta, e o credito que a
       // cancelou nao foi ganho: as duas pontas saem dos totais.
       compensationId: null,
@@ -141,14 +145,14 @@ async function expensesByCategory(
   userId: string,
   period: ResolvedPeriod,
   totalExpense: number,
-  transferId: string
+  ocultas: string[]
 ): Promise<ReportCategoryTotalDTO[]> {
   const grouped = await prisma.transaction.groupBy({
     by: ["categoryId"],
     where: {
       userId,
       type: "EXPENSE",
-      NOT: { categoryId: transferId },
+      NOT: { categoryId: { in: ocultas } },
       compensationId: null,
       ...dateFilter(period),
     },
@@ -234,7 +238,7 @@ interface MonthlyRow {
 async function monthlySeries(
   userId: string,
   months: string[],
-  transferId: string
+  ocultas: string[]
 ): Promise<ReportMonthTotalDTO[]> {
   if (months.length === 0) return [];
 
@@ -251,7 +255,7 @@ async function monthlySeries(
     WHERE "userId" = ${userId}
       AND "competenceDate" >= ${start}
       AND "competenceDate" < ${end}
-      AND "categoryId" IS DISTINCT FROM ${transferId}
+      AND ("categoryId" IS NULL OR "categoryId" NOT IN (${Prisma.join(ocultas)}))
       AND "compensationId" IS NULL
     GROUP BY 1, 2
   `;
@@ -299,10 +303,16 @@ export async function getReportSummary(
 ): Promise<ReportSummaryDTO> {
   const period = resolvePeriod(options);
   const systemIds = await ensureSystemCategories(prisma, userId);
-  const transferId = systemIds[SystemCategoryKey.TRANSFER];
+  // As duas ocultas que não somam em lugar nenhum. "Sem categoria" fica de
+  // fora desta lista de propósito: aquilo é despesa de verdade esperando um
+  // nome, e some do total no dia em que sumir do relatório também.
+  const ocultas = [
+    systemIds[SystemCategoryKey.TRANSFER],
+    systemIds[SystemCategoryKey.BILL_PAYMENT],
+  ];
 
   const [totals, uncategorizedCount] = await Promise.all([
-    totalsByType(userId, period, transferId),
+    totalsByType(userId, period, ocultas),
     // "Sem categoria" deixou de ser ausência e virou lugar: a oculta.
     prisma.transaction.count({
       where: {
@@ -314,8 +324,8 @@ export async function getReportSummary(
   ]);
 
   const [byCategory, monthly] = await Promise.all([
-    expensesByCategory(userId, period, totals.expense, transferId),
-    monthlySeries(userId, resolveSeriesMonths(period, options.history), transferId),
+    expensesByCategory(userId, period, totals.expense, ocultas),
+    monthlySeries(userId, resolveSeriesMonths(period, options.history), ocultas),
   ]);
 
   const balance = Number((totals.income - totals.expense).toFixed(2));

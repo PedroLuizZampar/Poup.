@@ -44,6 +44,7 @@ enum ItemStatus {
 enum SystemCategoryKey {
   TRANSFER
   UNCATEGORIZED
+  BILL_PAYMENT
 }
 
 /// Fixa ou variavel. Fixa e o que se repete com o mesmo valor todo mes e nao

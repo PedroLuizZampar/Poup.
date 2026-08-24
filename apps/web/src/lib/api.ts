@@ -468,18 +468,24 @@ export async function updateItemImage(id: string, imageUrl: string | null): Prom
   return res.item;
 }
 
+/** O que a sincronização de histórico completo devolve. */
+export interface BackfillResult {
+  examined: number;
+  created: number;
+  updated: number;
+}
+
 /**
- * Repara o histórico já importado de **uma** conta. O corte por conta é do
- * servidor: cada chamada tem de caber no tempo de uma função. Quem itera as
- * contas de uma conexão é a tela.
+ * Busca o extrato inteiro de **uma** conta, desde o começo.
+ *
+ * O corte por conta é do servidor: cada chamada tem de caber no tempo de uma
+ * função, e o extrato completo não tem tamanho conhecido. Quem escolhe a conta
+ * é a tela — e é ela também que avisa, antes, que isso pode demorar e falhar.
  */
-export async function repairAccount(
-  accountId: string
-): Promise<{ examined: number; updated: number }> {
-  return request<{ examined: number; updated: number }>(
-    `/pluggy/accounts/${accountId}/repair`,
-    { method: "POST" }
-  );
+export async function backfillAccount(accountId: string): Promise<BackfillResult> {
+  return request<BackfillResult>(`/pluggy/accounts/${accountId}/backfill`, {
+    method: "POST",
+  });
 }
 
 // ==========================================

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DIA_DE_VENCIMENTO_PADRAO,
+  ancorasDeCompra,
   competenciaDaTransacao,
   dadosDeParcela,
+  deslocarMes,
   diaDeVencimentoInicial,
   mesDaFatura,
   sinalDaTransacao,
@@ -377,5 +379,108 @@ describe("competenciaDaTransacao", () => {
     expect(competenciaDaTransacao(data, "setembro").toISOString()).toBe(
       "2026-08-22T14:30:00.000Z"
     );
+  });
+});
+
+describe("deslocarMes", () => {
+  it("anda para a frente e atravessa o ano", () => {
+    expect(deslocarMes("2026-11", 3)).toBe("2027-02");
+  });
+
+  it("anda para tras e atravessa o ano", () => {
+    expect(deslocarMes("2026-02", -3)).toBe("2025-11");
+  });
+
+  it("nao anda quando o delta e zero", () => {
+    expect(deslocarMes("2026-06", 0)).toBe("2026-06");
+  });
+
+  it("recusa o que nao e chave de mes", () => {
+    expect(deslocarMes("2026-13", 1)).toBeNull();
+    expect(deslocarMes("junho", 1)).toBeNull();
+  });
+});
+
+describe("ancorasDeCompra", () => {
+  const postada = (indice: number, mes: string) => ({
+    purchaseKey: "compra-1",
+    installmentIndex: indice,
+    billMonth: mes,
+    postada: true,
+  });
+
+  it("deduz o mes da parcela 1 a partir de uma parcela postada", () => {
+    // O caso real: a parcela 3 caiu na fatura de agosto, entao a compra ancora
+    // em junho — e as parcelas 4 a 8 se deduzem dai.
+    expect(ancorasDeCompra([postada(3, "2026-08")]).get("compra-1")).toBe("2026-06");
+  });
+
+  it("parcelas postadas coerentes concordam na ancora", () => {
+    const ancoras = ancorasDeCompra([
+      postada(1, "2026-06"),
+      postada(2, "2026-07"),
+      postada(3, "2026-08"),
+    ]);
+    expect(ancoras.get("compra-1")).toBe("2026-06");
+  });
+
+  it("ignora a parcela que ainda e previsao", () => {
+    // Enquanto e previsao o mes que vem junto e palpite do conector, e o
+    // palpite muda de significado entre conectores. So a postada e prova.
+    const ancoras = ancorasDeCompra([
+      { purchaseKey: "compra-1", installmentIndex: 4, billMonth: "2026-09", postada: false },
+    ]);
+    expect(ancoras.has("compra-1")).toBe(false);
+  });
+
+  it("entre postadas que discordam, vence a de menor indice", () => {
+    const ancoras = ancorasDeCompra([postada(3, "2026-08"), postada(1, "2026-07")]);
+    expect(ancoras.get("compra-1")).toBe("2026-07");
+  });
+
+  it("compra sem parcela postada nao entra no mapa", () => {
+    expect(ancorasDeCompra([]).size).toBe(0);
+  });
+
+  it("ignora parcela sem compra ou sem indice", () => {
+    const ancoras = ancorasDeCompra([
+      { purchaseKey: null, installmentIndex: 2, billMonth: "2026-08", postada: true },
+      { purchaseKey: "compra-2", installmentIndex: null, billMonth: "2026-08", postada: true },
+    ]);
+    expect(ancoras.size).toBe(0);
+  });
+});
+
+describe("mesDaFatura com ancora (as parcelas que andavam de dois em dois meses)", () => {
+  const emJunho = new Date("2026-06-02T00:00:00Z");
+
+  it("sem ancora, o forecast por parcela e deslocado de novo — o bug", () => {
+    // A Pluggy mandou o forecast **ja por parcela** (4/8 -> 2026-09), e o
+    // deslocamento de `indice - 1` somou por cima: a parcela 4 foi parar em
+    // dezembro e a 8 em agosto de 2027.
+    expect(mesDaFatura(emJunho, "2026-09", 4, false)).toBe("2026-12");
+    expect(mesDaFatura(emJunho, "2027-01", 8, false)).toBe("2027-08");
+  });
+
+  it("com ancora, cada parcela cai um mes depois da anterior", () => {
+    expect(mesDaFatura(emJunho, "2026-09", 4, false, "2026-06")).toBe("2026-09");
+    expect(mesDaFatura(emJunho, "2026-10", 5, false, "2026-06")).toBe("2026-10");
+    expect(mesDaFatura(emJunho, "2026-11", 6, false, "2026-06")).toBe("2026-11");
+    expect(mesDaFatura(emJunho, "2026-12", 7, false, "2026-06")).toBe("2026-12");
+    expect(mesDaFatura(emJunho, "2027-01", 8, false, "2026-06")).toBe("2027-01");
+  });
+
+  it("a ancora nao mexe na parcela ja postada", () => {
+    // Postada tem fatura de verdade: o mes vem dela, e nao de deducao nenhuma.
+    expect(mesDaFatura(emJunho, "2026-06", 1, true, "2026-06")).toBe("2026-06");
+  });
+
+  it("sem ancora, o forecast constante continua funcionando", () => {
+    // O outro conector manda o mesmo forecast nas oito parcelas, querendo dizer
+    // "a primeira cai em setembro". Este caso ja acertava, e nao pode regredir.
+    const emAgosto = new Date("2026-08-17T00:00:00Z");
+    expect(mesDaFatura(emAgosto, "2026-09", 1, false)).toBe("2026-09");
+    expect(mesDaFatura(emAgosto, "2026-09", 2, false)).toBe("2026-10");
+    expect(mesDaFatura(emAgosto, "2026-09", 8, false)).toBe("2027-04");
   });
 });

@@ -27,6 +27,37 @@ describe("detectTransferPairs", () => {
     ]);
   });
 
+  it("não pareia quando uma das pontas é cartão de crédito", () => {
+    // O pagamento de fatura tem dono proprio: `reconhecerPagamentos`, que tem a
+    // fatura na mao para confirmar e marca as duas pontas como "Pagamento de
+    // fatura". Enquanto os dois mecanismos disputavam o mesmo par, o resultado
+    // dependia de quem chegasse primeiro — e no caso real uma das pontas ficou
+    // sem marcacao nenhuma, contando como receita no relatorio.
+    const debito = tx({ id: "a" });
+    const creditoNoCartao = tx({
+      id: "b",
+      accountId: "cartao",
+      accountType: "CREDIT",
+      type: "INCOME",
+    });
+
+    expect(detectTransferPairs([debito], [debito, creditoNoCartao])).toEqual([]);
+  });
+
+  it("não pareia nem quando o cartão é o candidato", () => {
+    // A regra vale nos dois sentidos: qual das duas pontas entrou no lote de
+    // novas nao pode mudar a classificacao.
+    const creditoNoCartao = tx({
+      id: "b",
+      accountId: "cartao",
+      accountType: "CREDIT",
+      type: "INCOME",
+    });
+    const debito = tx({ id: "a" });
+
+    expect(detectTransferPairs([creditoNoCartao], [creditoNoCartao, debito])).toEqual([]);
+  });
+
   it("pareia mesmo sinal quando uma das contas é poupança (o caso -100/-100)", () => {
     const saida = tx({ id: "a" });
     const aplicacao = tx({

@@ -8,7 +8,7 @@ import {
   syncItem,
   deleteItem,
   updateAccount,
-  repairAccount,
+  backfillAccount,
   clearToken,
 } from "../lib/api";
 import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
@@ -45,7 +45,7 @@ import { PluggyCredentialsModal } from "../components/profile/PluggyCredentialsM
 import { AddConnectionModal } from "../components/profile/AddConnectionModal";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
-import { formatDateTime } from "../lib/format";
+import { contagem, formatDateTime } from "../lib/format";
 import { ACCOUNT_TYPE_LABELS } from "../lib/accounts";
 
 export function ProfilePage({
@@ -67,8 +67,8 @@ export function ProfilePage({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountDTO | null>(null);
-  /** Conexão sendo reparada, e o progresso conta a conta. */
-  const [repairing, setRepairing] = useState<{
+  /** Conexão cujo histórico completo está sendo buscado, e o progresso. */
+  const [backfilling, setBackfilling] = useState<{
     itemId: string;
     atual: number;
     total: number;
@@ -109,7 +109,7 @@ export function ProfilePage({
       setSyncingId("ALL");
       const res = await syncItem();
       toast.success(
-        `Sincronização concluída! ${res.accountsSynced} contas e ${res.transactionsSynced} transações atualizadas.`
+        `Sincronização concluída! ${contagem(res.accountsSynced, "conta", "contas")} e ${contagem(res.transactionsSynced, "transação atualizada", "transações atualizadas")}.`
       );
       notifySuggestionsChanged();
       await loadData();
@@ -125,7 +125,7 @@ export function ProfilePage({
       setSyncingId(pluggyItemId);
       const res = await syncItem(pluggyItemId);
       toast.success(
-        `Instituição sincronizada! ${res.accountsSynced} contas e ${res.transactionsSynced} transações atualizadas.`
+        `Instituição sincronizada! ${contagem(res.accountsSynced, "conta", "contas")} e ${contagem(res.transactionsSynced, "transação atualizada", "transações atualizadas")}.`
       );
       notifySuggestionsChanged();
       await loadData();
@@ -177,55 +177,73 @@ export function ProfilePage({
   }
 
   /**
-   * Repara o histórico de uma conexão, uma conta por requisição.
+   * Busca o extrato inteiro de uma conexão, desde o começo.
    *
-   * O laço é do cliente de propósito: o servidor corta por conta para caber no
-   * tempo de uma função, e é aqui que dá para mostrar em qual delas está.
+   * O laço é do cliente de propósito: o servidor corta por conta porque o
+   * extrato completo não tem tamanho conhecido e cada requisição precisa caber
+   * no tempo de uma função. É aqui que dá para mostrar em qual delas está.
+   *
+   * O aviso antes não é formalidade: numa conta antiga a requisição estoura — e
+   * quem clicou precisa saber disso antes, para ler o erro como "não coube" e
+   * não como "quebrou".
    */
-  async function handleRepairItem(item: ItemDTO) {
+  async function handleBackfillItem(item: ItemDTO) {
     const contas = accounts.filter((a) => a.itemId === item.id && a.pluggyAccountId);
     if (contas.length === 0) {
-      toast.error("Esta conexão não tem contas importadas para reparar.");
+      toast.error("Esta conexão não tem contas importadas para sincronizar.");
       return;
     }
 
     const ok = await confirm({
-      title: "Reparar histórico",
-      message: `Vamos reler o extrato de ${contas.length} conta(s) de ${item.institutionName} na Pluggy e corrigir o que já está no app — valores devolvidos lançados ao contrário e parcelas sem número. Nada é apagado, e nenhuma transação nova é importada.`,
-      confirmText: "Reparar",
+      title: "Sincronizar período completo",
+      message:
+        `Vamos buscar na Pluggy todo o extrato de ${item.institutionName}, desde o começo, ` +
+        `passando por ${contagem(contas.length, "conta", "contas")}. ` +
+        "Dependendo de quantas transações houver, isso pode demorar vários minutos e " +
+        "falhar por tempo esgotado — nesse caso nada se perde, e tentar de novo continua " +
+        "de onde parou. O que for importado entra na fila de revisão.",
+      confirmText: "Buscar tudo",
     });
     if (!ok) return;
 
-    let corrigidas = 0;
+    let criadas = 0;
+    let atualizadas = 0;
     let falhas = 0;
 
     try {
       for (let i = 0; i < contas.length; i++) {
-        setRepairing({ itemId: item.id, atual: i + 1, total: contas.length });
+        setBackfilling({ itemId: item.id, atual: i + 1, total: contas.length });
         try {
-          const res = await repairAccount(contas[i].id);
-          corrigidas += res.updated;
+          const res = await backfillAccount(contas[i].id);
+          criadas += res.created;
+          atualizadas += res.updated;
         } catch (err: any) {
-          // Uma conta que falha não interrompe as outras: o reparo é
-          // idempotente, e reparar três de quatro é melhor que nenhuma.
-          console.warn(`Falha ao reparar a conta ${contas[i].id}:`, err?.message || err);
+          // Uma conta que falha não interrompe as outras: a busca é idempotente,
+          // e trazer três de quatro é melhor que nenhuma.
+          console.warn(`Falha ao buscar o histórico da conta ${contas[i].id}:`, err?.message || err);
           falhas++;
         }
       }
     } finally {
-      setRepairing(null);
+      setBackfilling(null);
     }
 
     if (falhas > 0) {
       toast.error(
-        `${corrigidas} transação(ões) corrigida(s), mas ${falhas} conta(s) falharam. Tente de novo.`
+        `${contagem(criadas, "transação importada", "transações importadas")}, mas ` +
+          `${contagem(falhas, "conta falhou", "contas falharam")} por tempo esgotado. ` +
+          "Tente de novo para continuar de onde parou."
       );
-    } else if (corrigidas === 0) {
-      toast.success("Nada a corrigir: o histórico desta conexão já está em dia.");
+    } else if (criadas === 0 && atualizadas === 0) {
+      toast.success("Nada novo: o histórico desta conexão já está completo.");
     } else {
-      toast.success(`${corrigidas} transação(ões) corrigida(s).`);
+      toast.success(
+        `${contagem(criadas, "transação importada", "transações importadas")} e ` +
+          `${contagem(atualizadas, "atualizada", "atualizadas")}.`
+      );
     }
 
+    notifySuggestionsChanged();
     await loadData();
   }
 
@@ -575,20 +593,21 @@ export function ProfilePage({
                       >
                         {item.hasPendingSync ? "Sincronizar •" : "Sincronizar"}
                       </Button>
-                      {/* O histórico anterior à correção do sinal e às colunas
-                          de parcela só se conserta relendo o extrato: o sync
-                          normal só revisita trinta dias. */}
+                      {/* O sync comum só revisita trinta dias, e uma conexão
+                          nova nasce sabendo só o mês em que foi criada. Este é
+                          o caminho para o resto. O corte por conta é do
+                          servidor — o laço com o progresso mora no cliente. */}
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => handleRepairItem(item)}
-                        loading={repairing?.itemId === item.id}
-                        disabled={repairing !== null}
-                        title="Reler o extrato e corrigir o que já está importado"
+                        onClick={() => handleBackfillItem(item)}
+                        loading={backfilling?.itemId === item.id}
+                        disabled={backfilling !== null}
+                        title="Buscar todo o extrato desta conexão, desde o começo"
                       >
-                        {repairing?.itemId === item.id
-                          ? `Conta ${repairing.atual} de ${repairing.total}`
-                          : "Reparar histórico"}
+                        {backfilling?.itemId === item.id
+                          ? `Conta ${backfilling.atual} de ${backfilling.total}`
+                          : "Sincronizar período completo"}
                       </Button>
                       {/* O ícone herda a cor do botão (`currentColor`) em vez de
                           ter hover próprio: assim o botão inteiro é um único

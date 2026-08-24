@@ -7,7 +7,7 @@ import {
   listItems,
   deleteItem,
   updateItemImage,
-  repairAccount,
+  backfillAccount,
 } from "./pluggy.service";
 import { createReviewNotification } from "../notifications/notifications.service";
 import { requireAuth } from "../../middleware/requireAuth";
@@ -75,14 +75,18 @@ pluggyRouter.patch(
 );
 
 /**
- * Reparo do histórico, uma conta por vez. O corte por conta não é detalhe de
- * implementação: é o que mantém cada requisição dentro do teto de tempo da
- * função. Quem itera as contas de uma conexão é a tela.
+ * Histórico completo de **uma** conta. O corte por conta não é detalhe de
+ * implementação: é o que dá a cada requisição alguma chance de caber no teto de
+ * tempo da função. Quem escolhe a conta é a tela, uma de cada vez.
+ *
+ * A notificação sai como a do sync: o que entra aqui pode ser anos de extrato,
+ * e a fila de revisão precisa avisar que cresceu.
  */
 pluggyRouter.post(
-  "/accounts/:accountId/repair",
+  "/accounts/:accountId/backfill",
   asyncHandler(async (req, res) => {
-    const result = await repairAccount(req.userId!, req.params.accountId);
+    const result = await backfillAccount(req.userId!, req.params.accountId);
+    await createReviewNotification(req.userId!, result.review);
     res.json(result);
   })
 );

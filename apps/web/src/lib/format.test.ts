@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime } from "./format";
+import { contagem, formatDate, formatDateTime } from "./format";
 
 describe("fuso dos testes", () => {
   it("roda em America/Sao_Paulo, onde o bug aparece", () => {
@@ -46,5 +46,32 @@ describe("formatDateTime", () => {
     // `lastSyncedAt` e `createdAt` sao momentos reais: quem sincronizou as 21h
     // quer ler 21h, no relogio dele.
     expect(formatDateTime("2026-09-10T00:00:00.000Z")).toBe("09/09/2026 às 21:00");
+  });
+});
+
+describe("contagem", () => {
+  it("usa o singular para exatamente um", () => {
+    expect(contagem(1, "transação importada", "transações importadas")).toBe(
+      "1 transação importada"
+    );
+  });
+
+  it("usa o plural para muitos", () => {
+    expect(contagem(12, "transação importada", "transações importadas")).toBe(
+      "12 transações importadas"
+    );
+  });
+
+  it("usa o plural para zero", () => {
+    // "0 transação importada" e errado em portugues: zero pede plural.
+    expect(contagem(0, "transação importada", "transações importadas")).toBe(
+      "0 transações importadas"
+    );
+  });
+
+  it("concorda o particípio junto, e nao so o substantivo", () => {
+    // O motivo de a forma inteira entrar nos dois argumentos: pluralizar so o
+    // substantivo deixaria "2 transações importada".
+    expect(contagem(2, "conta atualizada", "contas atualizadas")).toBe("2 contas atualizadas");
   });
 });

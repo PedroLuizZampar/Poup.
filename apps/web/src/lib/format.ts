@@ -122,3 +122,17 @@ export function amountSizeClass(
   if (len <= 19) return "text-[0.875rem] leading-[1.35]"; // até R$ 1.234.567.890,12
   return "text-[0.75rem] leading-[1.4]";
 }
+
+/**
+ * Concorda a frase com o número: `contagem(1, "transação importada",
+ * "transações importadas")` → "1 transação importada".
+ *
+ * Existe porque "1 transação(ões) importada(s)" é uma frase que ninguém
+ * escreveria à mão — e era o que o app mostrava. A forma inteira entra nos dois
+ * argumentos, e não só o substantivo, porque em português o particípio concorda
+ * junto ("importada"/"importadas") e um helper que só pluralizasse o substantivo
+ * empurraria o problema uma palavra para a frente.
+ */
+export function contagem(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}

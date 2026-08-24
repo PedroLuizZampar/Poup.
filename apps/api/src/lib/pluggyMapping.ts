@@ -83,10 +83,27 @@ export function mesDaFatura(
   data: Date,
   billForecastDate?: string | null,
   installmentNumber?: number | null,
-  jaNaFatura?: boolean
+  jaNaFatura?: boolean,
+  /**
+   * O mes em que a parcela 1 desta compra caiu, quando alguma parcela ja
+   * postada permitiu deduzi-lo (ver `ancorasDeCompra`). Fato vence previsao:
+   * com ancora, o forecast do conector nao e consultado.
+   */
+  ancora?: string | null
 ): string {
   let ano: number;
   let mes: number; // 1-based
+
+  if (
+    ancora &&
+    !jaNaFatura &&
+    typeof installmentNumber === "number" &&
+    Number.isInteger(installmentNumber) &&
+    installmentNumber >= 1
+  ) {
+    const daAncora = deslocarMes(ancora, installmentNumber - 1);
+    if (daAncora) return daAncora;
+  }
 
   if (billForecastDate && /^\d{4}-(0[1-9]|1[0-2])$/.test(billForecastDate)) {
     const [a, m] = billForecastDate.split("-").map(Number);
@@ -131,6 +148,82 @@ function inteiroNaFaixa(valor: unknown, min: number, max: number): number | null
 }
 
 /**
+ * Anda `delta` meses numa chave "YYYY-MM". Aceita delta negativo.
+ *
+ * Deixar o `Date` normalizar o excesso e o que faz a virada de ano sair de
+ * graca, nos dois sentidos.
+ */
+export function deslocarMes(chave: string, delta: number): string | null {
+  const casa = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(chave);
+  if (!casa) return null;
+  const ano = Number(casa[1]);
+  const mes = Number(casa[2]);
+  const movido = new Date(Date.UTC(ano, mes - 1 + delta, 1));
+  return chaveDeMes(movido.getUTCFullYear(), movido.getUTCMonth() + 1);
+}
+
+/** Uma parcela, do ponto de vista de quem procura a ancora da compra. */
+export interface ParcelaConhecida {
+  /** A compra a que ela pertence. Nulo quando nao ha compra a agrupar. */
+  purchaseKey: string | null;
+  installmentIndex: number | null;
+  /** O mes de fatura ja atribuido a esta parcela, "YYYY-MM". */
+  billMonth: string | null;
+  /**
+   * Se a Pluggy ja vinculou a parcela a uma fatura de verdade. So a parcela
+   * postada e prova: enquanto e previsao, o mes que vem junto e palpite do
+   * conector — e o palpite varia de significado entre conectores.
+   */
+  postada: boolean;
+}
+
+/**
+ * Em que mes de fatura a **primeira** parcela de cada compra caiu.
+ *
+ * Existe porque `billForecastDate` chega com dois significados diferentes, e
+ * nao ha como distingui-los olhando uma linha isolada. Nos dados reais:
+ *
+ * - Uma compra de 8x mandou `forecast` **por parcela** (09, 10, 11, 12, 01).
+ * - Outra mandou o **mesmo** `forecast` em todas as oito (09, 09, 09...),
+ *   querendo dizer "a primeira cai em setembro".
+ *
+ * `mesDaFatura` soma `indice - 1` por cima do forecast, o que acerta a segunda
+ * e estraga a primeira: as parcelas 4 a 8 foram parar em 2026-12, 2027-02,
+ * 2027-04, 2027-06 e 2027-08 — andando de dois em dois meses.
+ *
+ * A saida do impasse e a parcela **postada**: quando a Pluggy ja vinculou
+ * alguma parcela da compra a uma fatura real, aquele mes e fato, e o resto da
+ * compra se deduz dele. `ancora = mesDaParcela - (indice - 1)`.
+ *
+ * Compras sem nenhuma parcela postada nao aparecem no mapa, e continuam no
+ * comportamento antigo — que e justamente o que acerta o segundo caso.
+ *
+ * Entre parcelas postadas que discordem, vence a de menor indice: ela e a mais
+ * proxima da ancora e a que menos acumula deslocamento.
+ */
+export function ancorasDeCompra(parcelas: ParcelaConhecida[]): Map<string, string> {
+  const melhorIndice = new Map<string, number>();
+  const ancoras = new Map<string, string>();
+
+  for (const parcela of parcelas) {
+    if (!parcela.postada) continue;
+    if (!parcela.purchaseKey || !parcela.billMonth) continue;
+    if (typeof parcela.installmentIndex !== "number" || parcela.installmentIndex < 1) continue;
+
+    const ancora = deslocarMes(parcela.billMonth, -(parcela.installmentIndex - 1));
+    if (!ancora) continue;
+
+    const atual = melhorIndice.get(parcela.purchaseKey);
+    if (atual !== undefined && atual <= parcela.installmentIndex) continue;
+
+    melhorIndice.set(parcela.purchaseKey, parcela.installmentIndex);
+    ancoras.set(parcela.purchaseKey, ancora);
+  }
+
+  return ancoras;
+}
+
+/**
  * Os tres campos de cartao de uma transacao.
  *
  * `creditCardMetadata` presente e o unico sinal confiavel de que a linha e de
@@ -141,7 +234,9 @@ function inteiroNaFaixa(valor: unknown, min: number, max: number): number | null
  * sem o outro derruba os dois.
  */
 export function dadosDeParcela(
-  pTx: Pick<PluggyTransaction, "date" | "creditCardMetadata">
+  pTx: Pick<PluggyTransaction, "date" | "creditCardMetadata">,
+  /** O mes da parcela 1 desta compra, quando conhecido. Ver `ancorasDeCompra`. */
+  ancora?: string | null
 ): DadosDeParcela {
   const meta = pTx.creditCardMetadata;
   if (!meta) {
@@ -164,7 +259,8 @@ export function dadosDeParcela(
     new Date(pTx.date),
     meta.billForecastDate,
     indice,
-    pluggyBillId !== null
+    pluggyBillId !== null,
+    ancora
   );
 
   return indice === null

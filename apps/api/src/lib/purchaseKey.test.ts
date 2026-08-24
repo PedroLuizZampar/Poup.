@@ -75,3 +75,49 @@ describe("purchaseKeyDe", () => {
     expect(purchaseKeyDe(base)).toMatch(/^[0-9a-f]{40}$/);
   });
 });
+
+describe("purchaseKeyDe: descricao truncada pelo conector", () => {
+  /**
+   * O caso real, do Mercado Pago: as parcelas ja postadas chegam como
+   * "MERCADOLIVRE*AUMAIMPOR" e as previstas como "MERCADOLIVRE*AUMA" — a mesma
+   * compra de 8x, com o mesmo dia e a mesma conta, cortada no fim. O CNPJ, que
+   * teria precedencia e resolveria sozinho, vem ausente em todas as linhas.
+   *
+   * O resultado era uma compra partida em dois grupos na tela: "3 de 8" e
+   * "5 de 8".
+   */
+  const compra = {
+    accountId: "cartao-1",
+    date: new Date("2026-06-02T00:00:00Z"),
+    purchaseDate: new Date("2026-06-02T00:00:00Z"),
+    totalInstallments: 8,
+  };
+
+  it("junta a parcela postada com a prevista, apesar do corte", () => {
+    const postada = purchaseKeyDe({ ...compra, description: "MERCADOLIVRE*AUMAIMPOR" });
+    const prevista = purchaseKeyDe({ ...compra, description: "MERCADOLIVRE*AUMA" });
+
+    expect(postada).not.toBeNull();
+    expect(postada).toBe(prevista);
+  });
+
+  it("ainda separa lojistas de verdade sob o mesmo prefixo", () => {
+    // O corte e no fim, entao o prefixo tem de ser longo o bastante para que
+    // dois vendedores diferentes do mesmo marketplace nao virem uma compra so.
+    const auma = purchaseKeyDe({ ...compra, description: "MERCADOLIVRE*AUMAIMPOR" });
+    const kairon = purchaseKeyDe({ ...compra, description: "MERCADOLIVRE*KAIRON" });
+
+    expect(auma).not.toBe(kairon);
+  });
+
+  it("nao junta o marketplace consigo mesmo em outro dia", () => {
+    const junho = purchaseKeyDe({ ...compra, description: "MERCADOLIVRE*AUMAIMPOR" });
+    const agosto = purchaseKeyDe({
+      ...compra,
+      description: "MERCADOLIVRE*AUMAIMPOR",
+      purchaseDate: new Date("2026-08-17T00:00:00Z"),
+    });
+
+    expect(junho).not.toBe(agosto);
+  });
+});

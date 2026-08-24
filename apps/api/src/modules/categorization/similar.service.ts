@@ -45,9 +45,12 @@ export async function findSimilarTransactions(
       userId,
       id: { not: base.id },
       date: { gte: desde },
-      // Transferência interna não entra: ela já está resolvida, e oferecê-la
-      // aqui convidaria a desfazer o pareamento sem querer.
-      categoryId: { not: systemIds[SystemCategoryKey.TRANSFER] },
+      // Transferência interna e pagamento de fatura não entram: as duas já
+      // estão resolvidas e são pareadas, e oferecê-las aqui convidaria a
+      // desfazer o pareamento sem querer.
+      categoryId: {
+        notIn: [systemIds[SystemCategoryKey.TRANSFER], systemIds[SystemCategoryKey.BILL_PAYMENT]],
+      },
     },
     orderBy: { date: "desc" },
     take: MAX_CANDIDATES,

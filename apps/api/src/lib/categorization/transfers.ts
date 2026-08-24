@@ -6,6 +6,9 @@
  * e o cuidado todo está em errar para menos — este é o único caminho do sistema
  * que grava uma categoria sem passar pelo usuário.
  *
+ * Cartão de crédito fica de fora por inteiro: aquilo é pagamento de fatura, e
+ * tem dono próprio (`reconhecerPagamentos`).
+ *
  * O caso que quebra a intuição é a poupança: depositar 100 na poupança aparece
  * como saída de 100 nas DUAS pontas, porque o extrato da poupança registra a
  * aplicação como débito. Por isso "mesmo sinal" é aceito — mas só quando uma das
@@ -44,9 +47,24 @@ function acumula(candidate: TransferCandidate): boolean {
   return candidate.accountType === "SAVINGS" || candidate.accountType === "INVESTMENT";
 }
 
+/**
+ * Cartao de credito nao entra em transferencia entre contas.
+ *
+ * Dinheiro que anda entre uma conta corrente e um cartao e pagamento de fatura,
+ * e quem entende disso e `reconhecerPagamentos`, que tem a fatura na mao para
+ * confirmar. Antes os dois mecanismos disputavam o mesmo par, e o resultado
+ * dependia de qual chegasse primeiro: no caso real, junho e julho sairam
+ * pareados como transferencia e agosto saiu marcado so de um lado, com a outra
+ * ponta contando como receita no relatorio.
+ */
+function ehCartao(candidate: TransferCandidate): boolean {
+  return candidate.accountType === "CREDIT";
+}
+
 function podeParear(a: TransferCandidate, b: TransferCandidate): boolean {
   if (a.id === b.id) return false;
   if (a.accountId === b.accountId) return false;
+  if (ehCartao(a) || ehCartao(b)) return false;
   if (a.transferPairId !== null || b.transferPairId !== null) return false;
   if (a.amount !== b.amount) return false;
   if (Math.abs(a.date.getTime() - b.date.getTime()) > TRANSFER_WINDOW_DAYS * DAY_MS) {

@@ -15,6 +15,7 @@ import { SimilarTransactionsModal } from "./SimilarTransactionsModal";
 import { CompensationModal } from "./CompensationModal";
 import { useToast } from "../ui/Toast";
 import { formatCurrency, formatDate } from "../../lib/format";
+import { InstallmentList } from "./InstallmentList";
 import { useCategoryMap } from "../../hooks/useCategories";
 import { displayCategory } from "../../lib/categories";
 import { Money } from "../ui/Money";
@@ -253,27 +254,37 @@ export function TransactionDetailModal({
 
         {/* Parcela só aparece quando existe — a maioria das transações não é
             parcelada, e um "Parcela —" ocuparia linha para dizer nada. O
-            vencimento vem do dia cadastrado no cartão; sem ele, some. */}
+            vencimento vem do dia cadastrado no cartão; sem ele, some.
+
+            A lista das outras parcelas mora aqui, e não num dropdown na grid:
+            "quais já paguei?" é pergunta de detalhe, e é aqui que há espaço
+            para respondê-la sem espremer oito linhas numa linha de tabela. */}
         {transaction.installmentTotal && (
-          <div className="p-3.5 rounded-card bg-surface-alt/60 border border-border flex items-center justify-between gap-3">
-            <div>
-              <span className="text-overline uppercase tracking-wider text-text-secondary block">
-                Parcelamento
-              </span>
-              <span className="text-xs font-semibold text-text-primary tnum">
-                Parcela {transaction.installmentIndex} de {transaction.installmentTotal}
-              </span>
-            </div>
-            {transaction.dueDate && (
-              <div className="text-right shrink-0">
+          <div className="p-3.5 rounded-card bg-surface-alt/60 border border-border flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
                 <span className="text-overline uppercase tracking-wider text-text-secondary block">
-                  Vencimento
+                  Parcelamento
                 </span>
                 <span className="text-xs font-semibold text-text-primary tnum">
-                  {formatDate(transaction.dueDate)}
+                  Parcela {transaction.installmentIndex} de {transaction.installmentTotal}
                 </span>
               </div>
-            )}
+              {transaction.dueDate && (
+                <div className="text-right shrink-0">
+                  <span className="text-overline uppercase tracking-wider text-text-secondary block">
+                    Vencimento
+                  </span>
+                  <span className="text-xs font-semibold text-text-primary tnum">
+                    {formatDate(transaction.dueDate)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-border/60">
+              <InstallmentList transactionId={transaction.id} destacar={transaction.id} />
+            </div>
           </div>
         )}
 

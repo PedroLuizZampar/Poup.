@@ -4,7 +4,12 @@ import {
   Prisma,
   SystemCategoryKey,
 } from "@prisma/client";
-import type { InstallmentsResponse, TransactionDTO, TransactionType } from "@poup/shared";
+import type {
+  InstallmentDTO,
+  InstallmentsResponse,
+  TransactionDTO,
+  TransactionType,
+} from "@poup/shared";
 import {
   AccountNotFoundError,
   CategoryNotFoundError,
@@ -12,6 +17,8 @@ import {
 } from "../../lib/errors";
 import { ensureSystemCategories } from "../../lib/systemCategories";
 import { vencimentoDaFatura } from "../../lib/pluggyMapping";
+import { statusDaParcela } from "../../lib/statusDaParcela";
+import { buscarEmLotes } from "../../lib/lotes";
 import { reopenPendingSuggestion } from "../categorization/categorization.service";
 
 export { AccountNotFoundError, CategoryNotFoundError, TransactionNotFoundError };
@@ -367,7 +374,7 @@ export async function listInstallments(
   // Compra a vista nao tem grupo. Devolver a propria linha seria mentir que ha
   // um parcelamento de um item so.
   if (!base.purchaseKey) {
-    return { installments: [], total: 0 };
+    return { installments: [], total: 0, paidTotal: 0 };
   }
 
   const rows = await prisma.transaction.findMany({
@@ -376,7 +383,34 @@ export async function listInstallments(
     orderBy: [{ installmentIndex: "asc" }, { competenceDate: "asc" }],
   });
 
-  const installments = rows.map(formatTransactionDTO);
+  // As faturas das parcelas, numa consulta so. So aqui, e nao no
+  // `formatTransactionDTO` de toda listagem: a pergunta "esta paga?" e do
+  // detalhe da compra, e a lista do mes pagaria o join sem usar a resposta.
+  const idsDeFatura = [
+    ...new Set(rows.map((r) => r.pluggyBillId).filter((id): id is string => id !== null)),
+  ];
+
+  const faturas = await buscarEmLotes(idsDeFatura, (lote) =>
+    prisma.creditCardBill.findMany({
+      where: { userId, pluggyBillId: { in: lote } },
+      select: { pluggyBillId: true, dueDate: true, paidAt: true },
+    })
+  );
+
+  const faturaPorId = new Map(faturas.map((f) => [f.pluggyBillId, f] as const));
+  const agora = new Date();
+
+  const installments: InstallmentDTO[] = rows.map((row) => {
+    const fatura = row.pluggyBillId ? faturaPorId.get(row.pluggyBillId) : null;
+    const status = statusDaParcela(fatura, agora);
+
+    return {
+      ...formatTransactionDTO(row),
+      status,
+      paidAt: status === "PAID" ? fatura!.paidAt!.toISOString() : null,
+    };
+  });
+
   // A soma das parcelas que existem, e nao `creditCardMetadata.totalAmount`: se
   // o historico so trouxe seis das dez, o total tem de dizer seis — um numero
   // que nao bate com as linhas exibidas e pior que numero nenhum.
@@ -384,5 +418,12 @@ export async function listInstallments(
     installments.reduce((soma, t) => soma + t.amount, 0).toFixed(2)
   );
 
-  return { installments, total };
+  const paidTotal = Number(
+    installments
+      .filter((t) => t.status === "PAID")
+      .reduce((soma, t) => soma + t.amount, 0)
+      .toFixed(2)
+  );
+
+  return { installments, total, paidTotal };
 }

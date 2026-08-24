@@ -23,6 +23,16 @@ export const SYSTEM_CATEGORY_DEFS = [
     icon: "dots",
     colorKey: "13",
   },
+  {
+    // Some dos totais pela mesma razao que a transferencia — o dinheiro ja foi
+    // contado na compra que gerou a fatura —, mas e outra coisa, e a pessoa
+    // precisa distinguir as duas na lista. Dai a categoria propria e o indigo,
+    // longe do carmim das outras duas.
+    systemKey: SystemCategoryKey.BILL_PAYMENT,
+    name: "Pagamento de fatura",
+    icon: "card",
+    colorKey: "9",
+  },
 ] as const;
 
 export type SystemCategoryIds = Record<SystemCategoryKey, string>;

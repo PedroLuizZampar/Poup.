@@ -20,6 +20,7 @@ import {
 } from "../../lib/institutions";
 import { buscarEmLotes, emLotes } from "../../lib/lotes";
 import {
+  ancorasDeCompra,
   competenciaDaTransacao,
   dadosDeParcela,
   diaDeVencimentoInicial,
@@ -228,8 +229,18 @@ export function dataInicialDaBusca(
  * exatamente por essa logica viver duplicada dentro de um laco que o sinal do
  * estorno ficou errado por meses sem ninguem ver.
  */
-export function camposDaTransacao(pTx: PluggyTransaction, accountId: string) {
-  const parcela = dadosDeParcela(pTx);
+export function camposDaTransacao(
+  pTx: PluggyTransaction,
+  accountId: string,
+  /**
+   * O mês da parcela 1 de cada compra, por `purchaseKey`. Ver
+   * `ancorasDeCompra`: sem isto, uma parcela ainda não postada herda o
+   * `billForecastDate` do conector, que ora significa "a fatura desta parcela"
+   * e ora "a fatura da primeira" — e o app não tem como saber qual dos dois
+   * olhando uma linha isolada.
+   */
+  ancoras?: Map<string, string>
+) {
   const purchaseDate = pTx.creditCardMetadata?.purchaseDate
     ? new Date(pTx.creditCardMetadata.purchaseDate)
     : null;
@@ -239,6 +250,22 @@ export function camposDaTransacao(pTx: PluggyTransaction, accountId: string) {
     pTx.descriptionRaw ||
     "Transação sem descrição"
   ).trim();
+
+  // A chave primeiro, e sem âncora nenhuma: ela não depende do mês de fatura, e
+  // é justamente ela que encontra a âncora. Inverter os dois deixaria a
+  // dependência circular.
+  const semAncora = dadosDeParcela(pTx);
+  const purchaseKey = purchaseKeyDe({
+    accountId,
+    date,
+    description,
+    purchaseDate,
+    cnpj: pTx.merchant?.cnpj ?? null,
+    totalInstallments: semAncora.installmentTotal,
+  });
+
+  const ancora = purchaseKey ? ancoras?.get(purchaseKey) ?? null : null;
+  const parcela = ancora ? dadosDeParcela(pTx, ancora) : semAncora;
 
   return {
     description,
@@ -252,15 +279,36 @@ export function camposDaTransacao(pTx: PluggyTransaction, accountId: string) {
     // Onde a despesa pesa. Para cartão é o mês da fatura, e não o dia da compra.
     competenceDate: competenciaDaTransacao(date, parcela.billMonth),
     purchaseDate,
-    purchaseKey: purchaseKeyDe({
-      accountId,
-      date,
-      description,
-      purchaseDate,
-      cnpj: pTx.merchant?.cnpj ?? null,
-      totalInstallments: parcela.installmentTotal,
-    }),
+    purchaseKey,
   };
+}
+
+/**
+ * As âncoras que valem para uma conta: as parcelas já postadas que o lote traz
+ * mais as que já estão no banco.
+ *
+ * As duas fontes importam. Só o lote perderia a compra cuja parcela postada
+ * chegou num sync anterior e não voltou nesta janela; só o banco perderia a
+ * compra que está sendo importada agora, no primeiro sync da conta.
+ */
+async function ancorasDaConta(
+  accountId: string,
+  doLote: ReturnType<typeof camposDaTransacao>[]
+): Promise<Map<string, string>> {
+  const armazenadas = await prisma.transaction.findMany({
+    where: { accountId, pluggyBillId: { not: null }, installmentIndex: { not: null } },
+    select: { purchaseKey: true, installmentIndex: true, billMonth: true },
+  });
+
+  return ancorasDeCompra([
+    ...doLote.map((c) => ({
+      purchaseKey: c.purchaseKey,
+      installmentIndex: c.installmentIndex,
+      billMonth: c.billMonth,
+      postada: c.pluggyBillId !== null,
+    })),
+    ...armazenadas.map((r) => ({ ...r, postada: true })),
+  ]);
 }
 
 /** O que `buscarPorPluggyIds` devolve, para a comparacao abaixo. */
@@ -315,6 +363,110 @@ async function buscarPorPluggyIds(pluggyIds: string[]) {
       },
     })
   );
+}
+
+/** O que a sincronização das transações de **uma** conta apurou. */
+interface ContaSincronizada {
+  /** Quantas transações a Pluggy devolveu. */
+  examined: number;
+  /** Os ids **locais** das linhas recém-criadas, para o pipeline de revisão. */
+  criadas: string[];
+  /** Quantas linhas que já existiam de fato mudaram. */
+  updated: number;
+}
+
+/**
+ * Importa as transações de uma conta: cria o que falta, atualiza o que mudou,
+ * e não toca no que está igual.
+ *
+ * Uma cópia só desta regra, e o motivo é histórico: ela já viveu duplicada
+ * dentro de dois laços, e foi por isso que o sinal do estorno ficou errado por
+ * meses num dos dois sem ninguém ver.
+ *
+ * `dateFrom` é o que separa os dois usos. Com data, é o sync comum, cujo custo
+ * precisa parar de crescer junto com o histórico. Sem data, é o pedido
+ * explícito de trazer o extrato inteiro — ver `backfillAccount`.
+ */
+async function sincronizarTransacoesDaConta(
+  client: Awaited<ReturnType<typeof getPluggyClientForUser>>,
+  userId: string,
+  accountId: string,
+  pluggyAccountId: string,
+  dateFrom?: string
+): Promise<ContaSincronizada> {
+  const transactions: PluggyTransaction[] = await client
+    .fetchAllTransactions(pluggyAccountId, dateFrom ? { dateFrom } : undefined)
+    .catch((err: any) => {
+      // O sync não pode cair por causa de uma conta: as outras ainda têm o que
+      // importar. Quem pediu o extrato inteiro, porém, precisa saber que
+      // falhou — senão "0 transações" se confunde com "conta já em dia".
+      if (!dateFrom) {
+        throw new UpstreamError(`Erro ao buscar transações na Pluggy: ${err?.message}`, {
+          details: err?.message,
+        });
+      }
+      console.warn(`Erro ao buscar transações da conta ${pluggyAccountId}:`, err?.message);
+      return [] as PluggyTransaction[];
+    });
+
+  if (transactions.length === 0) {
+    return { examined: 0, criadas: [], updated: 0 };
+  }
+
+  // O que já existe, com os campos que a Pluggy pode ter corrigido — para a
+  // comparação abaixo distinguir "voltou dentro da janela" de "mudou".
+  const existentes = await buscarPorPluggyIds(transactions.map((t) => t.id));
+  const existentePorPluggyId = new Map(
+    existentes.map((t) => [t.pluggyTransactionId!, t] as const)
+  );
+
+  // Duas passadas: a primeira só para achar as parcelas já postadas, que são as
+  // únicas que provam em que mês a compra ancora. A segunda usa isso.
+  const ancoras = await ancorasDaConta(
+    accountId,
+    transactions.map((pTx) => camposDaTransacao(pTx, accountId))
+  );
+
+  const novas: Prisma.TransactionCreateManyInput[] = [];
+  const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
+
+  for (const pTx of transactions) {
+    const campos = camposDaTransacao(pTx, accountId, ancoras);
+    const existente = existentePorPluggyId.get(pTx.id);
+
+    if (!existente) {
+      novas.push({ userId, pluggyTransactionId: pTx.id, isRecurring: false, ...campos });
+      continue;
+    }
+
+    if (naoMudou(existente, campos)) {
+      continue;
+    }
+
+    alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));
+  }
+
+  // Uma ida ao banco por lote, e não uma por transação. Era o `await` dentro
+  // do laço que fazia o primeiro sync levar minutos: cada upsert é um
+  // ida-e-volta até o Neon, e eles aconteciam em fila.
+  for (const lote of emLotes(novas)) {
+    // `skipDuplicates` cobre a corrida com um sync simultâneo: quem perde a
+    // corrida ignora a linha em vez de estourar no unique.
+    await prisma.transaction.createMany({ data: lote, skipDuplicates: true });
+  }
+
+  for (const lote of emLotes(alteracoes)) {
+    await prisma.$transaction(lote);
+  }
+
+  // O pipeline de revisão só deve rodar sobre o que é novo — reprocessar o que
+  // já foi revisado ressuscitaria sugestões que o usuário já julgou.
+  const criadas =
+    novas.length > 0
+      ? (await buscarPorPluggyIds(novas.map((n) => n.pluggyTransactionId!))).map((t) => t.id)
+      : [];
+
+  return { examined: transactions.length, criadas, updated: alteracoes.length };
 }
 
 /** Sincroniza um item **já resolvido**, do dono já conferido. */
@@ -429,76 +581,27 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
 
     accountsSynced++;
 
-    // 5. Transações da conta, via cursor pagination (v2)
-    //
-    // Sempre com data inicial: antes pedia o extrato inteiro toda vez, o que
-    // fazia o custo de sincronizar crescer para sempre junto com o histórico.
-    // Ver `dataInicialDaBusca` para as duas janelas e o que cada uma custa.
+    // 5. Transações da conta. Sempre com data inicial: antes pedia o extrato
+    //    inteiro toda vez, o que fazia o custo de sincronizar crescer para
+    //    sempre junto com o histórico. Ver `dataInicialDaBusca` para as duas
+    //    janelas e o que cada uma custa — e `backfillAccount` para o caminho
+    //    que pede o extrato inteiro de propósito.
     const maisRecente = await prisma.transaction.findFirst({
       where: { accountId: accountRecord.id },
       orderBy: { date: "desc" },
       select: { date: true },
     });
 
-    const dateFrom = dataInicialDaBusca(maisRecente?.date);
-
-    const transactions: PluggyTransaction[] = await client
-      .fetchAllTransactions(pAccount.id, { dateFrom })
-      .catch((err: any) => {
-        console.warn(`Erro ao buscar transações da conta ${pAccount.id}:`, err?.message);
-        return [] as PluggyTransaction[];
-      });
-
-    if (transactions.length === 0) continue;
-
-    // O que já existe, com os campos que a Pluggy pode ter corrigido — para a
-    // comparação abaixo distinguir "voltou dentro da janela" de "mudou".
-    const existentes = await buscarPorPluggyIds(transactions.map((t) => t.id));
-    const existentePorPluggyId = new Map(
-      existentes.map((t) => [t.pluggyTransactionId!, t] as const)
+    const importadas = await sincronizarTransacoesDaConta(
+      client,
+      userId,
+      accountRecord.id,
+      pAccount.id,
+      dataInicialDaBusca(maisRecente?.date)
     );
 
-    const novas: Prisma.TransactionCreateManyInput[] = [];
-    const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
-
-    for (const pTx of transactions) {
-      const campos = camposDaTransacao(pTx, accountRecord.id);
-
-      const existente = existentePorPluggyId.get(pTx.id);
-
-      if (!existente) {
-        novas.push({ userId, pluggyTransactionId: pTx.id, isRecurring: false, ...campos });
-        continue;
-      }
-
-      if (naoMudou(existente, campos)) {
-        continue;
-      }
-
-      alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));
-    }
-
-    // Uma ida ao banco por lote, e não uma por transação. Era o `await` dentro
-    // do laço que fazia o primeiro sync levar minutos: cada upsert é um
-    // ida-e-volta até o Neon, e eles aconteciam em fila.
-    for (const lote of emLotes(novas)) {
-      // `skipDuplicates` cobre a corrida com um sync simultâneo: quem perde a
-      // corrida ignora a linha em vez de estourar no unique.
-      await prisma.transaction.createMany({ data: lote, skipDuplicates: true });
-    }
-
-    for (const lote of emLotes(alteracoes)) {
-      await prisma.$transaction(lote);
-    }
-
-    // O pipeline de revisão só deve rodar sobre o que é novo — reprocessar o
-    // que já foi revisado ressuscitaria sugestões que o usuário já julgou.
-    if (novas.length > 0) {
-      const criadas = await buscarPorPluggyIds(novas.map((n) => n.pluggyTransactionId!));
-      idsNovos.push(...criadas.map((t) => t.id));
-    }
-
-    transactionsSynced += transactions.length;
+    idsNovos.push(...importadas.criadas);
+    transactionsSynced += importadas.examined;
   }
 
   const review = await processNewTransactions(userId, idsNovos);
@@ -617,39 +720,49 @@ export async function syncAllItems(userId: string): Promise<{
   };
 }
 
-export interface RepairResult {
+/** O que uma sincronização de histórico completo devolve ao cliente. */
+export interface BackfillResult {
   /** Quantas transações a Pluggy devolveu para esta conta. */
   examined: number;
-  /** Quantas linhas locais de fato mudaram. */
+  /** Quantas linhas foram criadas agora. */
+  created: number;
+  /** Quantas linhas que já existiam de fato mudaram. */
   updated: number;
+  /** O que o pipeline de revisão fez com as criadas. */
+  review: ProcessResult;
 }
 
 /**
- * Reescreve o histórico já importado de **uma** conta com as regras de hoje.
+ * Importa o extrato **inteiro** de uma conta, desde o começo.
  *
- * Existe porque a correção do sinal e os campos de parcela não alcançam
- * sozinhos o que já está no banco: o sync só revisita trinta dias, e o resto
- * ficaria para sempre com o estorno invertido e sem parcela.
+ * Existe por causa do teto que o sync se impõe: uma conexão nova nasce sabendo
+ * só o mês em que foi criada, porque um primeiro sync sem limite não tem
+ * tamanho conhecido e estoura o tempo da função (ver `dataInicialDaBusca`). O
+ * histórico anterior não vem sozinho depois — a janela seguinte parte do que já
+ * existe. Este é o caminho para buscá-lo, sob pedido explícito de quem sabe o
+ * que está pedindo.
  *
- * Duas restrições deliberadas:
+ * Três decisões:
  *
- * - **Só atualiza; nunca insere.** O primeiro sync de uma conexão traz de
- *   propósito só o mês corrente, para caber no tempo da função. Um reparo que
- *   importasse tudo que a Pluggy conhece encheria a fila de revisão com
- *   centenas de transações antigas que ninguém pediu — deixaria de ser
- *   "consertar o que está errado" e viraria "importar cinco anos de extrato".
  * - **Uma conta por chamada.** O extrato completo não tem tamanho conhecido, e
- *   o teto de uma função serverless é de sessenta segundos. Quem itera as
- *   contas é a tela, uma requisição de cada vez.
- *
- * Não chama `processNewTransactions`: nenhuma sugestão nasce daqui, e nenhuma
- * notificação é criada. É idempotente — rodar duas vezes na mesma conta
- * devolve `updated: 0` na segunda.
+ *   o teto de uma função serverless é de sessenta segundos. Estourar é um
+ *   desfecho previsto, e não destrutivo: o que já foi gravado fica, e chamar de
+ *   novo continua de onde parou.
+ * - **Insere e atualiza.** É a diferença para o sync comum, e é o ponto: as
+ *   linhas antigas não existem localmente, então limitar-se a atualizar não
+ *   traria nada.
+ * - **As criadas passam pelo pipeline.** Sem isso o histórico chegaria sem
+ *   categoria, sem pareamento de transferência e sem entrar na fila — dado
+ *   morto no extrato. O custo é honesto: cinco anos de extrato geram uma fila
+ *   de revisão do tamanho de cinco anos de extrato.
  */
-export async function repairAccount(userId: string, accountId: string): Promise<RepairResult> {
+export async function backfillAccount(
+  userId: string,
+  accountId: string
+): Promise<BackfillResult> {
   const account = await prisma.account.findFirst({
     where: { id: accountId, userId },
-    select: { id: true, pluggyAccountId: true },
+    select: { id: true, pluggyAccountId: true, type: true },
   });
 
   // O par (id, userId) é o que prova posse. Id sozinho não prova nada.
@@ -659,50 +772,42 @@ export async function repairAccount(userId: string, accountId: string): Promise<
 
   if (!account.pluggyAccountId) {
     throw new UnprocessableError(
-      "Esta conta não veio de uma conexão da Pluggy, então não há histórico a reparar."
+      "Esta conta não veio de uma conexão da Pluggy, então não há histórico a buscar."
     );
   }
 
   const client = await getPluggyClientForUser(userId);
 
-  // Sem `dateFrom`: aqui o histórico inteiro é o ponto.
-  const transactions: PluggyTransaction[] = await client
-    .fetchAllTransactions(account.pluggyAccountId)
-    .catch((err: any) => {
-      throw new UpstreamError(`Erro ao buscar transações na Pluggy: ${err?.message}`, {
-        details: err?.message,
-      });
-    });
-
-  if (transactions.length === 0) {
-    return { examined: 0, updated: 0 };
+  // As faturas antes das transações: é `pluggyBillId` que dá a uma compra
+  // antiga o mês de fatura em que ela pesa. Sem esta chamada, o histórico de um
+  // cartão voltaria inteiro com a competência do dia da compra.
+  if (account.type === AccountType.CREDIT) {
+    await sincronizarFaturas(client, userId, account.id, account.pluggyAccountId);
   }
 
-  const existentes = await buscarPorPluggyIds(transactions.map((t) => t.id));
-  const existentePorPluggyId = new Map(
-    existentes.map((t) => [t.pluggyTransactionId!, t] as const)
+  // Sem `dateFrom`: aqui o histórico inteiro é exatamente o ponto.
+  const importadas = await sincronizarTransacoesDaConta(
+    client,
+    userId,
+    account.id,
+    account.pluggyAccountId
   );
 
-  const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
+  const review = await processNewTransactions(userId, importadas.criadas);
 
-  for (const pTx of transactions) {
-    const existente = existentePorPluggyId.get(pTx.id);
-    if (!existente) continue;
+  await reconhecerPagamentos(userId).catch((err: any) => {
+    // Reconhecimento é melhoria, não requisito: falhar aqui não pode desfazer
+    // um histórico que já foi gravado.
+    console.warn(`Erro ao reconhecer pagamentos de fatura:`, err?.message || err);
+    return 0;
+  });
 
-    const campos = camposDaTransacao(pTx, account.id);
-
-    if (naoMudou(existente, campos)) {
-      continue;
-    }
-
-    alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));
-  }
-
-  for (const lote of emLotes(alteracoes)) {
-    await prisma.$transaction(lote);
-  }
-
-  return { examined: transactions.length, updated: alteracoes.length };
+  return {
+    examined: importadas.examined,
+    created: importadas.criadas.length,
+    updated: importadas.updated,
+    review,
+  };
 }
 
 /**
@@ -764,13 +869,21 @@ export async function sincronizarPorIds(
     existentes.map((t) => [t.pluggyTransactionId!, t] as const)
   );
 
+  // Sem as âncoras, o webhook reescreveria por cima do mês que o sync deduziu:
+  // ele vê um punhado de ids, e uma parcela isolada não diz onde a compra
+  // ancora. As do banco bastam aqui — o lote do webhook é pequeno por natureza.
+  const ancoras = await ancorasDaConta(
+    account.id,
+    transactions.map((pTx) => camposDaTransacao(pTx, account.id))
+  );
+
   const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
 
   for (const pTx of transactions) {
     const existente = existentePorPluggyId.get(pTx.id);
     if (!existente) continue;
 
-    const campos = camposDaTransacao(pTx, account.id);
+    const campos = camposDaTransacao(pTx, account.id, ancoras);
     if (naoMudou(existente, campos)) continue;
 
     alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));

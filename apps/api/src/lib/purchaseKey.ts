@@ -9,7 +9,9 @@ import { merchantKey } from "./categorization/normalize";
  * parcelas, que sao a conta, o dia da compra, o lojista e o total de parcelas.
  *
  * O que **nao** entra: o valor da parcela (que pode variar em centavos no
- * arredondamento) e o numero da parcela (que e justamente o que difere).
+ * arredondamento) e o numero da parcela (que e justamente o que difere). Do
+ * lojista entra so um prefixo, porque o conector corta a descricao no fim —
+ * ver `PREFIXO_DO_LOJISTA`.
  */
 export interface EntradaDeCompra {
   accountId: string;
@@ -28,6 +30,28 @@ function diaDe(data: Date): string {
 }
 
 /**
+ * Quantos caracteres do lojista entram na chave.
+ *
+ * Existe porque o conector corta a descricao **no fim**, e corta diferente
+ * conforme a parcela ja esteja postada ou ainda seja previsao. O caso real, do
+ * Mercado Pago: as parcelas 1 a 3 chegaram como "MERCADOLIVRE*AUMAIMPOR" e as
+ * 4 a 8 como "MERCADOLIVRE*AUMA" — a mesma compra de 8x, no mesmo dia e na
+ * mesma conta, partida em dois grupos na tela porque a chave via dois lojistas.
+ *
+ * O CNPJ resolveria sozinho e tem precedencia justamente por isso, mas veio
+ * ausente em todas as linhas. Sobrou a descricao, e de uma descricao que pode
+ * ser cortada no fim so o comeco e confiavel.
+ *
+ * O numero e um equilibrio, e erra para os dois lados se for mal escolhido:
+ * curto demais junta compras que nao sao a mesma (dois vendedores do mesmo
+ * marketplace, no mesmo dia, com o mesmo numero de parcelas); longo demais volta
+ * a partir a compra que o conector cortou. Dezesseis preserva o marketplace
+ * inteiro mais o comeco do vendedor — o suficiente para separar "AUMAIMPOR" de
+ * "KAIRON" e curto o bastante para sobreviver ao corte.
+ */
+const PREFIXO_DO_LOJISTA = 16;
+
+/**
  * A chave, ou null quando nao ha compra a agrupar.
  *
  * Devolve null em dois casos, e os dois sao deliberados: compra a vista (um
@@ -39,8 +63,11 @@ export function purchaseKeyDe(entrada: EntradaDeCompra): string | null {
   if (typeof total !== "number" || !Number.isInteger(total) || total < 2) return null;
 
   // CNPJ antes da descricao: descricao de cartao carrega o numero da parcela e
-  // a cidade, e varia entre as linhas da mesma compra.
-  const lojista = entrada.cnpj?.replace(/\D/g, "") || merchantKey(entrada.description);
+  // a cidade, e varia entre as linhas da mesma compra. Quando ele vem, entra
+  // inteiro — e identificador, nao texto, e nao sofre corte.
+  const cnpj = entrada.cnpj?.replace(/\D/g, "");
+  const doTexto = merchantKey(entrada.description)?.slice(0, PREFIXO_DO_LOJISTA).trim();
+  const lojista = cnpj || doTexto;
   if (!lojista) return null;
 
   const dia = diaDe(entrada.purchaseDate ?? entrada.date);

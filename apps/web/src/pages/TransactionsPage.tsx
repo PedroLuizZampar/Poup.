@@ -19,7 +19,7 @@ import { useCategoryMap } from "../hooks/useCategories";
 import { displayCategory } from "../lib/categories";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
 import { Money } from "../components/ui/Money";
-import { InstallmentGroup } from "../components/transactions/InstallmentGroup";
+import { InstallmentBadge } from "../components/transactions/InstallmentBadge";
 import { agruparCompras } from "../lib/agruparCompras";
 
 /** "2026-08-20" -> "20/08/2026". Sem passar por Date: o input entrega o dia
@@ -723,7 +723,7 @@ export function TransactionsPage() {
                               >
                                 {tx.description}
                               </span>
-                              <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
+                              <InstallmentBadge transaction={tx} agrupadas={parcelas?.length} />
                               {selo(compensada)}
                             </div>
                             {tx.note && (
@@ -820,7 +820,7 @@ export function TransactionsPage() {
                                 >
                                   {tx.description}
                                 </span>
-                                <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
+                                <InstallmentBadge transaction={tx} agrupadas={parcelas?.length} />
                                 {selo(compensada)}
                               </div>
                               {tx.note && (
