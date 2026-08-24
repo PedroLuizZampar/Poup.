@@ -130,7 +130,12 @@ describe("dadosDeParcela", () => {
         date: new Date("2026-08-10T00:00:00Z"),
         creditCardMetadata: { installmentNumber: 3, totalInstallments: 10 },
       } as any)
-    ).toEqual({ installmentIndex: 3, installmentTotal: 10, billMonth: "2026-11" });
+    ).toEqual({
+      installmentIndex: 3,
+      installmentTotal: 10,
+      billMonth: "2026-11",
+      pluggyBillId: null,
+    });
   });
 
   it("prefere o billForecastDate para o mes da fatura", () => {
@@ -145,14 +150,24 @@ describe("dadosDeParcela", () => {
           billForecastDate: "2026-11",
         },
       } as any)
-    ).toEqual({ installmentIndex: 3, installmentTotal: 10, billMonth: "2027-01" });
+    ).toEqual({
+      installmentIndex: 3,
+      installmentTotal: 10,
+      billMonth: "2027-01",
+      pluggyBillId: null,
+    });
   });
 
   it("sem creditCardMetadata, os tres campos ficam nulos", () => {
     // O caso da conta corrente: nao ha fatura, entao nao ha vencimento.
     expect(
       dadosDeParcela({ date: new Date("2026-08-10T00:00:00Z"), creditCardMetadata: null } as any)
-    ).toEqual({ installmentIndex: null, installmentTotal: null, billMonth: null });
+    ).toEqual({
+      installmentIndex: null,
+      installmentTotal: null,
+      billMonth: null,
+      pluggyBillId: null,
+    });
   });
 
   it("compra a vista no cartao tem fatura, mas nao tem parcela", () => {
@@ -161,7 +176,12 @@ describe("dadosDeParcela", () => {
         date: new Date("2026-08-10T00:00:00Z"),
         creditCardMetadata: { payeeMCC: 5812 },
       } as any)
-    ).toEqual({ installmentIndex: null, installmentTotal: null, billMonth: "2026-09" });
+    ).toEqual({
+      installmentIndex: null,
+      installmentTotal: null,
+      billMonth: "2026-09",
+      pluggyBillId: null,
+    });
   });
 
   it("meia parcela nao e parcela", () => {
@@ -194,6 +214,37 @@ describe("dadosDeParcela", () => {
         date: new Date("2026-08-10T00:00:00Z"),
         creditCardMetadata: { installmentNumber: 11, totalInstallments: 10 },
       } as any).installmentIndex
+    ).toBeNull();
+  });
+
+  it("le o billId quando a fatura ja fechou", () => {
+    expect(
+      dadosDeParcela({
+        date: new Date("2026-08-10T00:00:00Z"),
+        creditCardMetadata: {
+          installmentNumber: 3,
+          totalInstallments: 10,
+          billId: "bill-abc",
+        },
+      } as any).pluggyBillId
+    ).toBe("bill-abc");
+  });
+
+  it("fatura ainda aberta vem sem billId", () => {
+    // Enquanto a fatura nao fecha, a transacao e PENDING e nao tem vinculo. O
+    // evento `transactions/updated` e quem avisa que passou a ter.
+    expect(
+      dadosDeParcela({
+        date: new Date("2026-08-10T00:00:00Z"),
+        creditCardMetadata: { installmentNumber: 3, totalInstallments: 10 },
+      } as any).pluggyBillId
+    ).toBeNull();
+  });
+
+  it("sem creditCardMetadata nao ha fatura", () => {
+    expect(
+      dadosDeParcela({ date: new Date("2026-08-10T00:00:00Z"), creditCardMetadata: null } as any)
+        .pluggyBillId
     ).toBeNull();
   });
 });

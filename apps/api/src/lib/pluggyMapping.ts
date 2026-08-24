@@ -107,6 +107,11 @@ export interface DadosDeParcela {
   installmentTotal: number | null;
   /** "YYYY-MM". Nulo fora de cartao de credito. */
   billMonth: string | null;
+  /**
+   * A fatura a que a Pluggy ja vinculou a linha. Nulo enquanto a fatura esta
+   * aberta — o vinculo nasce no fechamento.
+   */
+  pluggyBillId: string | null;
 }
 
 /** Um inteiro dentro de uma faixa, ou null. */
@@ -130,7 +135,12 @@ export function dadosDeParcela(
 ): DadosDeParcela {
   const meta = pTx.creditCardMetadata;
   if (!meta) {
-    return { installmentIndex: null, installmentTotal: null, billMonth: null };
+    return {
+      installmentIndex: null,
+      installmentTotal: null,
+      billMonth: null,
+      pluggyBillId: null,
+    };
   }
 
   const total = inteiroNaFaixa(meta.totalInstallments, 1, 999);
@@ -139,10 +149,11 @@ export function dadosDeParcela(
   // O deslocamento usa o indice **ja validado**: uma parcela "0 de 10" nao pode
   // empurrar a fatura para tras.
   const billMonth = mesDaFatura(new Date(pTx.date), meta.billForecastDate, indice);
+  const pluggyBillId = meta.billId ?? null;
 
   return indice === null
-    ? { installmentIndex: null, installmentTotal: null, billMonth }
-    : { installmentIndex: indice, installmentTotal: total, billMonth };
+    ? { installmentIndex: null, installmentTotal: null, billMonth, pluggyBillId }
+    : { installmentIndex: indice, installmentTotal: total, billMonth, pluggyBillId };
 }
 
 /**

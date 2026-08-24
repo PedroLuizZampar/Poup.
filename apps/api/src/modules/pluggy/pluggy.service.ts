@@ -285,7 +285,8 @@ function naoMudou(
     existente.billMonth === campos.billMonth &&
     existente.competenceDate.getTime() === campos.competenceDate.getTime() &&
     (existente.purchaseDate?.getTime() ?? null) === (campos.purchaseDate?.getTime() ?? null) &&
-    existente.purchaseKey === campos.purchaseKey
+    existente.purchaseKey === campos.purchaseKey &&
+    existente.pluggyBillId === campos.pluggyBillId
   );
 }
 
@@ -308,6 +309,7 @@ async function buscarPorPluggyIds(pluggyIds: string[]) {
         competenceDate: true,
         purchaseDate: true,
         purchaseKey: true,
+        pluggyBillId: true,
       },
     })
   );
