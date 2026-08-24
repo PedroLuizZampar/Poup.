@@ -410,6 +410,20 @@ export async function updateItemImage(id: string, imageUrl: string | null): Prom
   return res.item;
 }
 
+/**
+ * Repara o histórico já importado de **uma** conta. O corte por conta é do
+ * servidor: cada chamada tem de caber no tempo de uma função. Quem itera as
+ * contas de uma conexão é a tela.
+ */
+export async function repairAccount(
+  accountId: string
+): Promise<{ examined: number; updated: number }> {
+  return request<{ examined: number; updated: number }>(
+    `/pluggy/accounts/${accountId}/repair`,
+    { method: "POST" }
+  );
+}
+
 // ==========================================
 // SUGESTÕES DE CATEGORIA
 // ==========================================
