@@ -1,5 +1,17 @@
 export type TransactionType = "INCOME" | "EXPENSE";
 
+/**
+ * Os quatro primeiros vem da Pluggy. `DEBIT_CARD` nao: para ela um cartao de
+ * debito e a conta corrente a que esta preso, entao o rotulo so existe quando o
+ * usuario o escolhe a mao.
+ */
+export type AccountType =
+  | "CHECKING"
+  | "SAVINGS"
+  | "CREDIT"
+  | "DEBIT_CARD"
+  | "INVESTMENT";
+
 export type BudgetStatus = "ok" | "warning" | "exceeded";
 
 export type SystemCategoryKey = "TRANSFER" | "UNCATEGORIZED";
@@ -30,7 +42,14 @@ export interface AccountDTO {
   originalName: string;
   /** Nome dado pelo usuario. Null quando ele nunca renomeou a conta. */
   customName?: string | null;
-  type: string;
+  /** O tipo **efetivo**: o escolhido pelo usuario quando existe, senao o da Pluggy. */
+  type: AccountType;
+  /** O que a Pluggy derivou. Preservado para permitir voltar atras. */
+  originalType: AccountType;
+  /** A escolha do usuario. Null quando ele nunca reclassificou a conta. */
+  customType: AccountType | null;
+  /** Dia do mes em que a fatura vence, 1 a 31. Obrigatorio em cartao de credito. */
+  creditCardDueDay: number | null;
   balance: number;
   institution: string;
   institutionName: string;
@@ -57,6 +76,16 @@ export interface TransactionDTO {
   accountName: string;
   categoryId: string | null;
   categoryName: string | null;
+  /** Numero desta parcela. Null quando a compra nao foi parcelada. */
+  installmentIndex: number | null;
+  /** Total de parcelas. Anda junto com `installmentIndex`: ou vem os dois, ou nenhum. */
+  installmentTotal: number | null;
+  /**
+   * Vencimento da fatura em que a transacao cai (ISO). Derivado do mes da fatura
+   * mais o dia de vencimento da conta — nao e coluna, para que corrigir o dia do
+   * cartao conserte todas as parcelas de uma vez.
+   */
+  dueDate: string | null;
 }
 
 export interface BudgetDTO {
@@ -115,6 +144,10 @@ export interface UpdateAccountRequest {
   name?: string | null;
   /** Ligada, a conta sai dos cards de saldo do Dashboard. */
   excludedFromBalance?: boolean;
+  /** Reclassificacao manual. Null volta ao tipo que a Pluggy derivou. */
+  customType?: AccountType | null;
+  /** Dia do vencimento da fatura, 1 a 31. Obrigatorio quando o tipo efetivo e CREDIT. */
+  creditCardDueDay?: number | null;
 }
 
 export interface UpdateItemImageRequest {
