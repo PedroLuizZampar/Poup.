@@ -271,6 +271,11 @@ export interface ItemDTO {
   customImageUrl?: string | null;
   status: string;
   lastSyncedAt: string | null;
+  /**
+   * O webhook avisou que ha transacao nova nesta conexao e o sync ainda nao
+   * rodou. O app nunca sincroniza sozinho: isto e um convite, nao um estado.
+   */
+  hasPendingSync: boolean;
   createdAt: string;
 }
 

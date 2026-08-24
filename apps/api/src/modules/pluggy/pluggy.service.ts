@@ -55,6 +55,7 @@ function toItemDTO(item: Item): ItemDTO {
     customImageUrl: item.customImageUrl,
     status: item.status,
     lastSyncedAt: item.lastSyncedAt?.toISOString() ?? null,
+    hasPendingSync: item.hasPendingSync,
     createdAt: item.createdAt.toISOString(),
   };
 }

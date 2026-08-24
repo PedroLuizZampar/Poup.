@@ -557,6 +557,11 @@ export function ProfilePage({
                           Última sincronização:{" "}
                           {item.lastSyncedAt ? formatDateTime(item.lastSyncedAt) : "Nunca"}
                         </span>
+                        {item.hasPendingSync && (
+                          <span className="text-[11px] text-primary block mt-0.5">
+                            Há transações novas nesta conexão.
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -568,7 +573,7 @@ export function ProfilePage({
                         loading={syncingId === item.pluggyItemId}
                         iconLeft={<RefreshIcon className="w-3.5 h-3.5" />}
                       >
-                        Sincronizar
+                        {item.hasPendingSync ? "Sincronizar •" : "Sincronizar"}
                       </Button>
                       {/* O histórico anterior à correção do sinal e às colunas
                           de parcela só se conserta relendo o extrato: o sync
