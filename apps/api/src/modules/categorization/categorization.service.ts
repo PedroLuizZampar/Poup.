@@ -93,7 +93,7 @@ export async function processNewTransactions(
     type: "INCOME" | "EXPENSE";
     date: Date;
     transferPairId: string | null;
-    account: { type: "CHECKING" | "SAVINGS" | "CREDIT" | "INVESTMENT" };
+    account: { type: "CHECKING" | "SAVINGS" | "CREDIT" | "DEBIT_CARD" | "INVESTMENT" };
   }): TransferCandidate => ({
     id: row.id,
     accountId: row.accountId,

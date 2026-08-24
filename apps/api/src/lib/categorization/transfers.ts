@@ -20,7 +20,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export interface TransferCandidate {
   id: string;
   accountId: string;
-  accountType: "CHECKING" | "SAVINGS" | "CREDIT" | "INVESTMENT";
+  /**
+   * `DEBIT_CARD` nunca vem do sync — e um rotulo manual sobre uma conta
+   * corrente. Ele entra aqui porque o tipo efetivo da conta pode traze-lo, e
+   * de proposito fica fora de `acumula`: cartao de debito e conta corrente, e
+   * duas despesas de mesmo valor entre duas contas correntes sao so duas
+   * despesas.
+   */
+  accountType: "CHECKING" | "SAVINGS" | "CREDIT" | "DEBIT_CARD" | "INVESTMENT";
   /** Sempre o módulo: o sinal está em `type`. */
   amount: number;
   type: "INCOME" | "EXPENSE";

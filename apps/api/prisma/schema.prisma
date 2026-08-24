@@ -26,6 +26,10 @@ enum AccountType {
   CHECKING
   SAVINGS
   CREDIT
+  /// Inalcancavel pelo sync: a Pluggy nao tem "cartao de debito" — para ela um
+  /// cartao de debito e a propria conta corrente a que esta preso. Este valor
+  /// so chega aqui por `customType`, quando o usuario rotula a conta a mao.
+  DEBIT_CARD
   INVESTMENT
 }
 
@@ -132,6 +136,17 @@ model Account {
   /// Preferência de exibição: a conta sai dos cards de saldo do Dashboard e
   /// continua valendo em transações, relatórios e orçamentos.
   excludedFromBalance Boolean  @default(false)
+  /// Tipo escolhido pelo usuario. Tem precedencia sobre `type`, que o sync
+  /// reescreve a cada atualizacao a partir do que a Pluggy derivou. Mesma
+  /// divisao de `name`/`customName`: o sync escreve uma coluna e nunca a outra.
+  customType       AccountType?
+  /// Dia do mes em que a fatura do cartao vence, 1 a 31. Semeado do
+  /// `creditData.balanceDueDate` da Pluggy no primeiro contato e, dali em
+  /// diante, so o usuario muda. E o que transforma o mes da fatura de uma
+  /// parcela (`Transaction.billMonth`) numa data de vencimento — por isso mora
+  /// na conta, e nao repetido em cada transacao: corrigir o dia aqui conserta
+  /// todas as parcelas de uma vez.
+  creditCardDueDay Int?
   institutionName  String?
   lastSyncedAt     DateTime?
   createdAt        DateTime    @default(now())
@@ -181,6 +196,15 @@ model Transaction {
   date                DateTime
   note                String?
   isRecurring         Boolean          @default(false)
+  /// Numero desta parcela e total de parcelas, como a Pluggy os entrega em
+  /// `creditCardMetadata`. Os dois andam juntos: meia parcela nao e parcela, e
+  /// quando so um dos dois vem, ambos ficam nulos.
+  installmentIndex    Int?
+  installmentTotal    Int?
+  /// A fatura em que a linha cai, como "YYYY-MM". Vem do `billForecastDate` da
+  /// Pluggy quando o conector e Open Finance; senao e derivado do mes da
+  /// transacao. Nulo fora de cartao de credito.
+  billMonth           String?
   /// Une as duas pontas de uma transferência interna detectada. Torna o
   /// pareamento idempotente e permite desfazer nas duas pontas de uma vez.
   transferPairId      String?
