@@ -81,6 +81,15 @@ Poup/
     relatórios; cobre o caso da poupança, em que as duas pontas têm o mesmo sinal
 20. Aplicar categoria em transações parecidas, por similaridade de descrição
     (`GET /transactions/:id/similar`, `POST /transactions/bulk-categorize`)
+21. Compensação de estorno de compra parcelada: a pessoa liga à mão o crédito do
+    estorno às N parcelas que ele cancela (`compensationId`, mesmo desenho do
+    `transferPairId`), e as duas pontas saem das **cinco** consultas que somam
+    dinheiro — três de relatório e as duas de orçamento. Manual de propósito:
+    a Pluggy não liga uma ponta à outra, e errar aqui apagaria uma despesa real
+    do relatório em silêncio. O vínculo fica fora de `camposDaTransacao`, então
+    sync, reparo e webhook não têm como desfazê-lo; desfazer é a pessoa quem
+    faz, por qualquer uma das pontas
+    (`GET|POST|DELETE /transactions/:id/compensation`)
 
 ### Frontend
 21. App React + Vite: roteamento e layout base
