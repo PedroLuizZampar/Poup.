@@ -8,6 +8,7 @@ import {
   syncItem,
   deleteItem,
   updateAccount,
+  repairAccount,
   clearToken,
 } from "../lib/api";
 import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
@@ -38,13 +39,14 @@ import { InstitutionLogo } from "../components/ui/InstitutionLogo";
 import { UserAvatar } from "../components/ui/UserAvatar";
 import { EditProfileModal } from "../components/profile/EditProfileModal";
 import { ChangePasswordModal } from "../components/profile/ChangePasswordModal";
-import { RenameAccountModal } from "../components/profile/RenameAccountModal";
+import { EditAccountModal } from "../components/profile/EditAccountModal";
 import { EditInstitutionImageModal } from "../components/profile/EditInstitutionImageModal";
 import { PluggyCredentialsModal } from "../components/profile/PluggyCredentialsModal";
 import { AddConnectionModal } from "../components/profile/AddConnectionModal";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { formatDateTime } from "../lib/format";
+import { ACCOUNT_TYPE_LABELS } from "../lib/accounts";
 
 export function ProfilePage({
   user,
@@ -64,7 +66,13 @@ export function ProfilePage({
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [renamingAccount, setRenamingAccount] = useState<AccountDTO | null>(null);
+  const [editingAccount, setEditingAccount] = useState<AccountDTO | null>(null);
+  /** Conexão sendo reparada, e o progresso conta a conta. */
+  const [repairing, setRepairing] = useState<{
+    itemId: string;
+    atual: number;
+    total: number;
+  } | null>(null);
   const [editingImageItem, setEditingImageItem] = useState<ItemDTO | null>(null);
   const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
   const [isAddConnectionOpen, setIsAddConnectionOpen] = useState(false);
@@ -166,6 +174,59 @@ export function ProfilePage({
     } finally {
       setTogglingAccountId(null);
     }
+  }
+
+  /**
+   * Repara o histórico de uma conexão, uma conta por requisição.
+   *
+   * O laço é do cliente de propósito: o servidor corta por conta para caber no
+   * tempo de uma função, e é aqui que dá para mostrar em qual delas está.
+   */
+  async function handleRepairItem(item: ItemDTO) {
+    const contas = accounts.filter((a) => a.itemId === item.id && a.pluggyAccountId);
+    if (contas.length === 0) {
+      toast.error("Esta conexão não tem contas importadas para reparar.");
+      return;
+    }
+
+    const ok = await confirm({
+      title: "Reparar histórico",
+      message: `Vamos reler o extrato de ${contas.length} conta(s) de ${item.institutionName} na Pluggy e corrigir o que já está no app — valores devolvidos lançados ao contrário e parcelas sem número. Nada é apagado, e nenhuma transação nova é importada.`,
+      confirmText: "Reparar",
+    });
+    if (!ok) return;
+
+    let corrigidas = 0;
+    let falhas = 0;
+
+    try {
+      for (let i = 0; i < contas.length; i++) {
+        setRepairing({ itemId: item.id, atual: i + 1, total: contas.length });
+        try {
+          const res = await repairAccount(contas[i].id);
+          corrigidas += res.updated;
+        } catch (err: any) {
+          // Uma conta que falha não interrompe as outras: o reparo é
+          // idempotente, e reparar três de quatro é melhor que nenhuma.
+          console.warn(`Falha ao reparar a conta ${contas[i].id}:`, err?.message || err);
+          falhas++;
+        }
+      }
+    } finally {
+      setRepairing(null);
+    }
+
+    if (falhas > 0) {
+      toast.error(
+        `${corrigidas} transação(ões) corrigida(s), mas ${falhas} conta(s) falharam. Tente de novo.`
+      );
+    } else if (corrigidas === 0) {
+      toast.success("Nada a corrigir: o histórico desta conexão já está em dia.");
+    } else {
+      toast.success(`${corrigidas} transação(ões) corrigida(s).`);
+    }
+
+    await loadData();
   }
 
   const hasCredentials = Boolean(credentials?.clientId && credentials.hasSecret);
@@ -509,6 +570,21 @@ export function ProfilePage({
                       >
                         Sincronizar
                       </Button>
+                      {/* O histórico anterior à correção do sinal e às colunas
+                          de parcela só se conserta relendo o extrato: o sync
+                          normal só revisita trinta dias. */}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleRepairItem(item)}
+                        loading={repairing?.itemId === item.id}
+                        disabled={repairing !== null}
+                        title="Reler o extrato e corrigir o que já está importado"
+                      >
+                        {repairing?.itemId === item.id
+                          ? `Conta ${repairing.atual} de ${repairing.total}`
+                          : "Reparar histórico"}
+                      </Button>
                       {/* O ícone herda a cor do botão (`currentColor`) em vez de
                           ter hover próprio: assim o botão inteiro é um único
                           alvo de hover, e não dois que acendem separados. */}
@@ -573,9 +649,9 @@ export function ProfilePage({
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setRenamingAccount(acc)}
-                                  title="Renomear conta"
-                                  aria-label={`Renomear a conta ${acc.name}`}
+                                  onClick={() => setEditingAccount(acc)}
+                                  title="Editar conta"
+                                  aria-label={`Editar a conta ${acc.name}`}
                                   className="tap-target text-text-disabled hover:text-primary transition-colors rounded-ctl focus-ring cursor-pointer"
                                 >
                                   <EditIcon className="w-3.5 h-3.5" />
@@ -589,6 +665,16 @@ export function ProfilePage({
                             >
                               <Money value={acc.balance} />
                             </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge size="sm" variant={acc.customType ? "info" : "neutral"}>
+                                {ACCOUNT_TYPE_LABELS[acc.type]}
+                              </Badge>
+                              {acc.type === "CREDIT" && acc.creditCardDueDay && (
+                                <span className="text-[10px] text-text-secondary tnum">
+                                  vence dia {acc.creditCardDueDay}
+                                </span>
+                              )}
+                            </div>
                             {acc.excludedFromBalance && (
                               <span className="text-[10px] text-text-secondary">
                                 Fora do saldo
@@ -618,10 +704,14 @@ export function ProfilePage({
         onClose={() => setIsPasswordModalOpen(false)}
       />
 
-      <RenameAccountModal
-        account={renamingAccount}
-        onClose={() => setRenamingAccount(null)}
-        onSaved={loadData}
+      <EditAccountModal
+        account={editingAccount}
+        onClose={() => setEditingAccount(null)}
+        onSaved={(atualizada) =>
+          setAccounts((atuais) =>
+            atuais.map((a) => (a.id === atualizada.id ? atualizada : a))
+          )
+        }
       />
 
       <EditInstitutionImageModal
