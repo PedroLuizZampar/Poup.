@@ -17,6 +17,12 @@ import {
   resolveItemInstitution,
 } from "../../lib/institutions";
 import { buscarEmLotes, emLotes } from "../../lib/lotes";
+import {
+  dadosDeParcela,
+  diaDeVencimentoInicial,
+  sinalDaTransacao,
+  valorAbsoluto,
+} from "../../lib/pluggyMapping";
 import { processNewTransactions } from "../categorization/categorization.service";
 import type { ProcessResult } from "../categorization/categorization.service";
 
@@ -223,6 +229,9 @@ async function buscarPorPluggyIds(pluggyIds: string[]) {
         type: true,
         date: true,
         accountId: true,
+        installmentIndex: true,
+        installmentTotal: true,
+        billMonth: true,
       },
     })
   );
@@ -287,27 +296,48 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
   for (const pAccount of accountsResponse.results) {
     const accountInstitution = resolveAccountInstitution(pAccount, institutionName);
 
+    const tipoDaConta = mapAccountType(pAccount);
+
     const accountRecord = await prisma.account.upsert({
       where: { pluggyAccountId: pAccount.id },
       update: {
         name: formatAccountName(pAccount, accountInstitution),
-        type: mapAccountType(pAccount),
+        type: tipoDaConta,
         balance: new Prisma.Decimal(pAccount.balance ?? 0),
         institutionName: accountInstitution,
         itemId: itemRecord.id,
         lastSyncedAt: new Date(),
+        // `excludedFromBalance`, `customType` e `creditCardDueDay` ficam de fora
+        // de propósito: são escolha do usuário, e o sync não desfaz escolha.
       },
       create: {
         userId,
         itemId: itemRecord.id,
         pluggyAccountId: pAccount.id,
         name: formatAccountName(pAccount, accountInstitution),
-        type: mapAccountType(pAccount),
+        type: tipoDaConta,
         balance: new Prisma.Decimal(pAccount.balance ?? 0),
         institutionName: accountInstitution,
         lastSyncedAt: new Date(),
+        // Poupança é reserva, não é o que se pode gastar hoje: nasce fora dos
+        // cards de saldo. O olhinho da Perfil é o caminho de volta.
+        excludedFromBalance: tipoDaConta === AccountType.SAVINGS,
+        ...(tipoDaConta === AccountType.CREDIT && {
+          creditCardDueDay: diaDeVencimentoInicial(pAccount),
+        }),
       },
     });
+
+    // Uma conta que a Pluggy passou a classificar como crédito (ou que existia
+    // antes da coluna) fica sem dia de vencimento, e a tela exige um. O
+    // `where` com `creditCardDueDay: null` é o que impede o sync de reescrever
+    // por cima do que o usuário corrigiu.
+    if (tipoDaConta === AccountType.CREDIT) {
+      await prisma.account.updateMany({
+        where: { id: accountRecord.id, creditCardDueDay: null },
+        data: { creditCardDueDay: diaDeVencimentoInicial(pAccount) },
+      });
+    }
 
     accountsSynced++;
 
@@ -344,16 +374,15 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
     const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
 
     for (const pTx of transactions) {
-      const rawAmount = pTx.amount ?? 0;
       const campos = {
         description: (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim(),
-        amount: new Prisma.Decimal(Math.abs(rawAmount)),
-        type:
-          pTx.type === "DEBIT" || rawAmount < 0
-            ? TransactionType.EXPENSE
-            : TransactionType.INCOME,
+        amount: new Prisma.Decimal(valorAbsoluto(pTx.amount)),
+        // O `type` da Pluggy manda. A versão antiga misturava `type` com o sinal
+        // do valor, e num cartão isso invertia todo estorno.
+        type: sinalDaTransacao(pTx.type, pTx.amount) as TransactionType,
         date: new Date(pTx.date),
         accountId: accountRecord.id,
+        ...dadosDeParcela(pTx),
       };
 
       const existente = existentePorPluggyId.get(pTx.id);
@@ -370,7 +399,10 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
         existente.amount.equals(campos.amount) &&
         existente.type === campos.type &&
         existente.date.getTime() === campos.date.getTime() &&
-        existente.accountId === campos.accountId
+        existente.accountId === campos.accountId &&
+        existente.installmentIndex === campos.installmentIndex &&
+        existente.installmentTotal === campos.installmentTotal &&
+        existente.billMonth === campos.billMonth
       ) {
         continue;
       }
