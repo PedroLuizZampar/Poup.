@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emLotes } from "../../lib/lotes";
-import { dataInicialDaBusca } from "./pluggy.service";
+import { camposDaTransacao, dataInicialDaBusca } from "./pluggy.service";
 
 /**
  * As duas peças puras do sync. O resto do `syncItem` fala com a Pluggy e com o
@@ -87,5 +87,33 @@ describe("dataInicialDaBusca", () => {
     expect(dataInicialDaBusca(null, new Date("2026-03-05T12:00:00Z"))).toMatch(
       /^\d{4}-\d{2}-\d{2}$/
     );
+  });
+});
+
+describe("camposDaTransacao", () => {
+  /**
+   * O sync escreve `data: campos` — tudo o que estiver aqui ele sobrescreve a
+   * cada sincronização. `compensationId` é uma decisão da pessoa, não um dado
+   * da Pluggy, e por isso precisa ficar de fora. Este teste existe para falhar
+   * no dia em que alguém adicionar o campo por engano.
+   */
+  it("não inclui o vínculo de compensação", () => {
+    const campos = camposDaTransacao(
+      {
+        id: "ptx-1",
+        description: "MERCADOLIVRE*MERCADOLIVRE",
+        amount: 34,
+        type: "DEBIT",
+        date: new Date("2026-08-17T00:00:00Z"),
+        creditCardMetadata: {
+          installmentNumber: 1,
+          totalInstallments: 8,
+          billForecastDate: "2026-09",
+        },
+      } as never,
+      "conta-1"
+    );
+
+    expect(Object.keys(campos)).not.toContain("compensationId");
   });
 });

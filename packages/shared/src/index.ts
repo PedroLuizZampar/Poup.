@@ -94,6 +94,12 @@ export interface TransactionDTO {
   competenceDate: string;
   /** Junta as parcelas de uma mesma compra. Null quando nao ha o que agrupar. */
   purchaseKey: string | null;
+  /**
+   * Une o estorno as parcelas que ele cancela, quando a pessoa compensou os
+   * dois a mao. Null e o normal. Nao-null significa que esta linha esta fora
+   * de todos os totais.
+   */
+  compensationId: string | null;
 }
 
 export interface InstallmentsResponse {

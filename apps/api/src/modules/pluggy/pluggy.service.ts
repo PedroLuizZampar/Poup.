@@ -228,7 +228,7 @@ export function dataInicialDaBusca(
  * exatamente por essa logica viver duplicada dentro de um laco que o sinal do
  * estorno ficou errado por meses sem ninguem ver.
  */
-function camposDaTransacao(pTx: PluggyTransaction, accountId: string) {
+export function camposDaTransacao(pTx: PluggyTransaction, accountId: string) {
   const parcela = dadosDeParcela(pTx);
   const purchaseDate = pTx.creditCardMetadata?.purchaseDate
     ? new Date(pTx.creditCardMetadata.purchaseDate)

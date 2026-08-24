@@ -272,6 +272,16 @@ model Transaction {
   /// Une as duas pontas de uma transferência interna detectada. Torna o
   /// pareamento idempotente e permite desfazer nas duas pontas de uma vez.
   transferPairId      String?
+  /// Une o estorno de uma compra parcelada as parcelas que ele cancela.
+  ///
+  /// Mesmo desenho do `transferPairId`: um uuid compartilhado por todas as
+  /// pontas, o que torna o vinculo idempotente e o desfazer atomico. A ponta
+  /// credito e uma linha INCOME; as outras sao as N parcelas EXPENSE.
+  ///
+  /// Fica fora de `camposDaTransacao` de proposito, e ha teste guardando isso:
+  /// e o que impede o sync, o reparo e o webhook de desfazerem o que a pessoa
+  /// resolveu a mao.
+  compensationId      String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -286,6 +296,7 @@ model Transaction {
   @@index([transferPairId])
   @@index([purchaseKey])
   @@index([pluggyBillId])
+  @@index([compensationId])
 }
 
 model Budget {

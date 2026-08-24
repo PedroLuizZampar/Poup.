@@ -78,6 +78,7 @@ export function formatTransactionDTO(tx: {
   billMonth: string | null;
   competenceDate: Date;
   purchaseKey: string | null;
+  compensationId: string | null;
 }): TransactionDTO {
   return {
     id: tx.id,
@@ -98,6 +99,7 @@ export function formatTransactionDTO(tx: {
     dueDate: vencimentoDaFatura(tx.billMonth, tx.account.creditCardDueDay)?.toISOString() ?? null,
     competenceDate: tx.competenceDate.toISOString(),
     purchaseKey: tx.purchaseKey,
+    compensationId: tx.compensationId,
   };
 }
 
