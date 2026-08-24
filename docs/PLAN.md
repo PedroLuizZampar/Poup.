@@ -180,6 +180,12 @@ Poup/
     útil, com feriados nacionais calculados da Páscoa
 52. Parcelas de uma mesma compra reunidas num dropdown, ordenadas, com o total
     da compra no fim
+53. Faturas do cartão importadas da Pluggy (`CreditCardBill`), com vencimento,
+    fechamento, total e o pagamento que a instituição reporta
+54. Pagamento de fatura reconhecido na conta corrente e categorizado como
+    transferência — a despesa do cartão parou de contar duas vezes
+55. Webhook da Pluggy: `transactions/updated` resolve o vínculo com a fatura na
+    hora, `transactions/created` avisa que há novidade na conexão
 
 ## Backlog (planejado, **não** implementado)
 
@@ -198,6 +204,8 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 | Parser de `"PARC 3/12"` na descrição | Só o `creditCardMetadata` preenche parcela hoje |
 | Conector que manda parcela mês a mês | O deslocamento `+(n-1)` assume que todas chegam juntas, como no Mercado Pago |
 | Parcela em lançamento manual | Os três campos só são escritos pelo sync, e a competência de lançamento manual é sempre a própria data |
+| Guardar os eventos de webhook recebidos | Evento perdido só chega no próximo sync |
+| Pluggy Payments (ITP) | Poup lê; não inicia pagamento |
 
 Outros pendentes conhecidos:
 

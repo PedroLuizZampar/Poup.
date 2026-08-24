@@ -85,8 +85,6 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
     select: { pluggyBillId: true, accountId: true, paidAt: true, paidAmount: true },
   });
 
-  if (faturasPagas.length === 0) return 0;
-
   const faturas: FaturaPaga[] = faturasPagas.map((f) => ({
     billId: f.pluggyBillId,
     accountId: f.accountId,
@@ -94,36 +92,46 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
     paidAmount: Number(f.paidAmount!),
   }));
 
-  // A janela de busca e a das faturas mais a folga do casamento: buscar o
-  // periodo inteiro traria transacoes que nao podem casar com nada.
-  const datas = faturas.map((f) => f.paidAt.getTime());
-  const folga = JANELA_DE_PAGAMENTO_DIAS * DIA_MS;
+  const idsCasados = new Set<string>();
 
-  const linhas = await prisma.transaction.findMany({
-    where: {
-      userId,
-      type: "EXPENSE",
-      categoryId: { not: transferId },
-      date: {
-        gte: new Date(Math.min(...datas) - folga),
-        lte: new Date(Math.max(...datas) + folga),
+  // O casamento por valor e data so tem o que fazer se a instituicao reportou
+  // algum pagamento. Sem fatura paga a funcao **nao** para aqui: a reserva
+  // abaixo existe justamente para o conector que nao devolve fatura nenhuma, e
+  // sair antes a deixaria inalcancavel no unico caso que a justifica.
+  if (faturas.length > 0) {
+    // A janela de busca e a das faturas mais a folga do casamento: buscar o
+    // periodo inteiro traria transacoes que nao podem casar com nada.
+    const datas = faturas.map((f) => f.paidAt.getTime());
+    const folga = JANELA_DE_PAGAMENTO_DIAS * DIA_MS;
+
+    const linhas = await prisma.transaction.findMany({
+      where: {
+        userId,
+        type: "EXPENSE",
+        categoryId: { not: transferId },
+        date: {
+          gte: new Date(Math.min(...datas) - folga),
+          lte: new Date(Math.max(...datas) + folga),
+        },
+        // Conta de credito nao paga fatura de cartao: a ponta de la e um
+        // credito no proprio cartao, e o pareamento de transferencia ja cuida
+        // dela.
+        account: { type: { not: "CREDIT" } },
       },
-      // Conta de credito nao paga fatura de cartao: a ponta de la e um credito
-      // no proprio cartao, e o pareamento de transferencia ja cuida dela.
-      account: { type: { not: "CREDIT" } },
-    },
-    select: { id: true, accountId: true, date: true, amount: true },
-  });
+      select: { id: true, accountId: true, date: true, amount: true },
+    });
 
-  const candidatos: DebitoCandidato[] = linhas.map((l) => ({
-    id: l.id,
-    accountId: l.accountId,
-    date: l.date,
-    amount: Number(l.amount),
-  }));
+    const candidatos: DebitoCandidato[] = linhas.map((l) => ({
+      id: l.id,
+      accountId: l.accountId,
+      date: l.date,
+      amount: Number(l.amount),
+    }));
 
-  const casamentos = casarPagamentos(faturas, candidatos);
-  const idsCasados = new Set(casamentos.map((c) => c.transactionId));
+    for (const casamento of casarPagamentos(faturas, candidatos)) {
+      idsCasados.add(casamento.transactionId);
+    }
+  }
 
   // A reserva, para conector que nao devolveu fatura: descricao explicita de
   // pagamento de fatura, sobre o que sobrou.
