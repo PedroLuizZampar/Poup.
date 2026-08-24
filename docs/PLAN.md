@@ -157,6 +157,21 @@ Poup/
     automática
 42. Tela de sem conexão honesta, e sessão preservada quando o servidor não
     responde — falha de rede deixou de ser tratada como sessão expirada
+43. Sinal da transação vindo do `type` da Pluggy, e não do sinal do valor —
+    devolução em cartão parou de ser lançada como despesa
+44. Parcelas estruturadas (`installmentIndex`, `installmentTotal`, `billMonth`)
+    vindas do `creditCardMetadata`, com o número da parcela na lista e no
+    detalhe
+45. Data de vencimento da parcela, derivada na leitura do mês da fatura mais o
+    dia cadastrado no cartão — mudar o dia reajusta todas as parcelas
+46. Classificação de conta em duas colunas: o tipo que a Pluggy deriva e o
+    rótulo que o usuário escolhe, incluindo "Cartão de débito", que a Pluggy
+    não tem
+47. Poupança nasce fora dos cards de saldo; o olhinho do Perfil a traz de volta
+48. Dia de vencimento da fatura por conta de crédito, semeado do
+    `balanceDueDate` da Pluggy e obrigatório na edição (padrão 10)
+49. Reparo do histórico já importado, uma conta por requisição — só reescreve o
+    que existe, não importa transação nova
 
 ## Backlog (planejado, **não** implementado)
 
@@ -171,6 +186,9 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 | Aba de Assinaturas | `PlanningPage` tem duas abas: orçamentos e metas |
 | Notificação de fatura próxima | Só há alertas de orçamento |
 | Widget Pluggy Connect | Descartado: a conexão é feita colando o id do item do painel da Pluggy |
+| Dia de fechamento da fatura | Não guardado; `billMonth` derivado erra em um mês para compra pós-fechamento |
+| Parser de `"PARC 3/12"` na descrição | Só o `creditCardMetadata` preenche parcela hoje |
+| Parcela em lançamento manual | Os três campos só são escritos pelo sync |
 
 Outros pendentes conhecidos:
 
