@@ -7,6 +7,7 @@ import { authRouter } from "./modules/auth/auth.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import { pluggyRouter } from "./modules/pluggy/pluggy.routes";
+import { webhookRouter } from "./modules/pluggy/webhook.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
 import { notificationsRouter } from "./modules/notifications/notifications.routes";
@@ -118,6 +119,10 @@ apiRouter.use("/accounts", accountsRouter);
 apiRouter.use("/categories", categoriesRouter);
 apiRouter.use("/transactions", transactionsRouter);
 apiRouter.use("/reports", reportsRouter);
+// Antes do `/pluggy` de propósito: aquele router aplica `requireAuth` a tudo
+// que casa, e quem chama o webhook é a Pluggy, sem sessão. O Express casa
+// prefixos na ordem em que foram montados.
+apiRouter.use("/pluggy/webhook", webhookRouter);
 apiRouter.use("/pluggy", pluggyRouter);
 apiRouter.use("/budgets", budgetsRouter);
 apiRouter.use("/goals", goalsRouter);

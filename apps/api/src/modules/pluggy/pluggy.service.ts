@@ -365,6 +365,8 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
       institutionColor: connectorColor,
       status: itemStatus,
       lastSyncedAt: new Date(),
+      // O sync rodou: o aviso do webhook cumpriu o papel.
+      hasPendingSync: false,
     },
   });
 
@@ -700,4 +702,82 @@ export async function repairAccount(userId: string, accountId: string): Promise<
   }
 
   return { examined: transactions.length, updated: alteracoes.length };
+}
+
+/**
+ * Reescreve **exatamente** as transações que o webhook nomeou.
+ *
+ * É o caminho barato: `transactions/updated` traz os ids, e buscar só eles
+ * mantém a requisição num tamanho conhecido — que é o que o teto de sessenta
+ * segundos de uma função serverless exige de algo disparado de fora.
+ *
+ * Como o sync e o reparo, só atualiza o que já existe: transação que o app
+ * nunca importou não nasce por webhook.
+ */
+export async function sincronizarPorIds(
+  userId: string,
+  pluggyAccountId: string,
+  transactionIds: string[]
+): Promise<number> {
+  if (transactionIds.length === 0) return 0;
+
+  const account = await prisma.account.findFirst({
+    where: { pluggyAccountId, userId },
+    select: { id: true },
+  });
+
+  // Conta de outro usuário, ou que o app não conhece: nada a fazer, e sem erro
+  // — um webhook que responde erro é um webhook que a Pluggy desativa.
+  if (!account) return 0;
+
+  const client = await getPluggyClientForUser(userId);
+
+  // `emLotes` usa LOTE = 500, que é exatamente o teto de ids por requisição do
+  // SDK — serve aqui sem ajuste. Dentro do lote ainda há paginação: o cursor é
+  // seguido até o fim, porque parar na primeira página perderia transações em
+  // silêncio, que é o pior modo de falhar num vínculo de fatura.
+  const transactions: PluggyTransaction[] = [];
+
+  for (const lote of emLotes(transactionIds)) {
+    let after: string | undefined;
+
+    do {
+      const pagina = await client
+        .fetchTransactionsCursor(pluggyAccountId, { ids: lote, after })
+        .catch((err: any) => {
+          console.warn(`Erro ao buscar transações do webhook:`, err?.message);
+          return null;
+        });
+
+      if (!pagina) break;
+
+      transactions.push(...pagina.results);
+      after = pagina.next ?? undefined;
+    } while (after);
+  }
+
+  if (transactions.length === 0) return 0;
+
+  const existentes = await buscarPorPluggyIds(transactions.map((t) => t.id));
+  const existentePorPluggyId = new Map(
+    existentes.map((t) => [t.pluggyTransactionId!, t] as const)
+  );
+
+  const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
+
+  for (const pTx of transactions) {
+    const existente = existentePorPluggyId.get(pTx.id);
+    if (!existente) continue;
+
+    const campos = camposDaTransacao(pTx, account.id);
+    if (naoMudou(existente, campos)) continue;
+
+    alteracoes.push(prisma.transaction.update({ where: { id: existente.id }, data: campos }));
+  }
+
+  for (const lote of emLotes(alteracoes)) {
+    await prisma.$transaction(lote);
+  }
+
+  return alteracoes.length;
 }

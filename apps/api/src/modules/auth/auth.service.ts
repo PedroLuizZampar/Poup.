@@ -5,6 +5,7 @@ import { env } from "../../env";
 import { validateImageDataUrl } from "../../lib/imageDataUrl";
 import { encryptSecret } from "../../lib/crypto";
 import {
+  createPluggyClient,
   invalidatePluggyClient,
   verifyPluggyCredentials,
 } from "../../lib/pluggy";
@@ -133,6 +134,8 @@ export async function register(input: RegisterInput) {
     throw new InvalidPluggyCredentialsError();
   }
 
+  await registrarWebhooks(clientId, clientSecret);
+
   const passwordHash = await bcrypt.hash(input.password, 10);
 
   const user = await prisma.user.create({
@@ -229,6 +232,46 @@ export async function getPluggyCredentials(userId: string): Promise<PluggyCreden
 }
 
 /**
+ * Registra os webhooks na aplicação Pluggy **do usuário**.
+ *
+ * Cada usuário fala com a Pluggy com a própria aplicação, então o webhook
+ * precisa ser registrado uma vez por aplicação — e não uma vez no app. O
+ * `itemId` do payload é quem diz depois de quem é o evento.
+ *
+ * `createPluggyClient` é usado no lugar de `new PluggyClient(...)` de propósito:
+ * ele passa `baseUrl: env.PLUGGY_BASE_URL` junto, e instanciar o cliente à mão
+ * deixaria o registro do webhook falando com o ambiente errado da Pluggy.
+ *
+ * Nunca derruba o salvamento das credenciais: um webhook que não registrou
+ * deixa o app exatamente como ele é hoje, que é sincronizando pelo botão.
+ */
+async function registrarWebhooks(clientId: string, clientSecret: string): Promise<void> {
+  const base = process.env.PUBLIC_API_URL;
+  const segredo = process.env.PLUGGY_WEBHOOK_SECRET;
+
+  if (!base || !segredo) {
+    console.warn("PUBLIC_API_URL ou PLUGGY_WEBHOOK_SECRET ausentes: webhooks não registrados.");
+    return;
+  }
+
+  try {
+    const client = createPluggyClient(clientId, clientSecret);
+    const url = `${base.replace(/\/$/, "")}/api/pluggy/webhook`;
+    const existentes = await client.fetchWebhooks();
+
+    for (const evento of ["transactions/created", "transactions/updated"] as const) {
+      const jaTem = existentes.results.some(
+        (w) => w.event === evento && w.url === url && !w.disabledAt
+      );
+      if (jaTem) continue;
+      await client.createWebhook(evento, url, { "x-poup-webhook-secret": segredo });
+    }
+  } catch (err: any) {
+    console.warn("Não foi possível registrar os webhooks na Pluggy:", err?.message || err);
+  }
+}
+
+/**
  * Trocar as credenciais exige a senha atual: são credenciais de acesso a dados
  * bancários, no mesmo nível do email.
  */
@@ -253,6 +296,8 @@ export async function updatePluggyCredentials(
   if (!credentialsOk) {
     throw new InvalidPluggyCredentialsError("clientSecret");
   }
+
+  await registrarWebhooks(clientId, clientSecret);
 
   await prisma.user.update({
     where: { id: userId },
