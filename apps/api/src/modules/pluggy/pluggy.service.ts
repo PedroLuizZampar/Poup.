@@ -19,11 +19,13 @@ import {
 } from "../../lib/institutions";
 import { buscarEmLotes, emLotes } from "../../lib/lotes";
 import {
+  competenciaDaTransacao,
   dadosDeParcela,
   diaDeVencimentoInicial,
   sinalDaTransacao,
   valorAbsoluto,
 } from "../../lib/pluggyMapping";
+import { purchaseKeyDe } from "../../lib/purchaseKey";
 import { processNewTransactions } from "../categorization/categorization.service";
 import type { ProcessResult } from "../categorization/categorization.service";
 
@@ -217,6 +219,76 @@ export function dataInicialDaBusca(
   return new Date(maisRecente.getTime() - JANELA_REVISITA_MS).toISOString().slice(0, 10);
 }
 
+/**
+ * Os campos de uma transacao da Pluggy, do jeito que vao para o banco.
+ *
+ * Existe como funcao porque o sync e o reparo precisam do **mesmo** calculo: foi
+ * exatamente por essa logica viver duplicada dentro de um laco que o sinal do
+ * estorno ficou errado por meses sem ninguem ver.
+ */
+function camposDaTransacao(pTx: PluggyTransaction, accountId: string) {
+  const parcela = dadosDeParcela(pTx);
+  const purchaseDate = pTx.creditCardMetadata?.purchaseDate
+    ? new Date(pTx.creditCardMetadata.purchaseDate)
+    : null;
+  const date = new Date(pTx.date);
+  const description = (
+    pTx.description ||
+    pTx.descriptionRaw ||
+    "Transação sem descrição"
+  ).trim();
+
+  return {
+    description,
+    amount: new Prisma.Decimal(valorAbsoluto(pTx.amount)),
+    // O `type` da Pluggy manda. A versão antiga misturava `type` com o sinal
+    // do valor, e num cartão isso invertia todo estorno.
+    type: sinalDaTransacao(pTx.type, pTx.amount) as TransactionType,
+    date,
+    accountId,
+    ...parcela,
+    // Onde a despesa pesa. Para cartão é o mês da fatura, e não o dia da compra.
+    competenceDate: competenciaDaTransacao(date, parcela.billMonth),
+    purchaseDate,
+    purchaseKey: purchaseKeyDe({
+      accountId,
+      date,
+      description,
+      purchaseDate,
+      cnpj: pTx.merchant?.cnpj ?? null,
+      totalInstallments: parcela.installmentTotal,
+    }),
+  };
+}
+
+/** O que `buscarPorPluggyIds` devolve, para a comparacao abaixo. */
+type LinhaExistente = Awaited<ReturnType<typeof buscarPorPluggyIds>>[number];
+
+/**
+ * Se a linha local ja diz exatamente o que a Pluggy esta dizendo.
+ *
+ * Reescrever uma linha identica custa uma ida ao banco e nao muda nada — e, com
+ * a janela de revisita, quase tudo que volta e identico.
+ */
+function naoMudou(
+  existente: LinhaExistente,
+  campos: ReturnType<typeof camposDaTransacao>
+): boolean {
+  return (
+    existente.description === campos.description &&
+    existente.amount.equals(campos.amount) &&
+    existente.type === campos.type &&
+    existente.date.getTime() === campos.date.getTime() &&
+    existente.accountId === campos.accountId &&
+    existente.installmentIndex === campos.installmentIndex &&
+    existente.installmentTotal === campos.installmentTotal &&
+    existente.billMonth === campos.billMonth &&
+    existente.competenceDate.getTime() === campos.competenceDate.getTime() &&
+    (existente.purchaseDate?.getTime() ?? null) === (campos.purchaseDate?.getTime() ?? null) &&
+    existente.purchaseKey === campos.purchaseKey
+  );
+}
+
 /** As linhas locais correspondentes a uma lista de ids da Pluggy, em lotes. */
 async function buscarPorPluggyIds(pluggyIds: string[]) {
   return buscarEmLotes(pluggyIds, (lote) =>
@@ -233,6 +305,9 @@ async function buscarPorPluggyIds(pluggyIds: string[]) {
         installmentIndex: true,
         installmentTotal: true,
         billMonth: true,
+        competenceDate: true,
+        purchaseDate: true,
+        purchaseKey: true,
       },
     })
   );
@@ -375,16 +450,7 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
     const alteracoes: Prisma.PrismaPromise<unknown>[] = [];
 
     for (const pTx of transactions) {
-      const campos = {
-        description: (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim(),
-        amount: new Prisma.Decimal(valorAbsoluto(pTx.amount)),
-        // O `type` da Pluggy manda. A versão antiga misturava `type` com o sinal
-        // do valor, e num cartão isso invertia todo estorno.
-        type: sinalDaTransacao(pTx.type, pTx.amount) as TransactionType,
-        date: new Date(pTx.date),
-        accountId: accountRecord.id,
-        ...dadosDeParcela(pTx),
-      };
+      const campos = camposDaTransacao(pTx, accountRecord.id);
 
       const existente = existentePorPluggyId.get(pTx.id);
 
@@ -393,18 +459,7 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
         continue;
       }
 
-      // Reescrever uma linha idêntica custa uma ida ao banco e não muda nada —
-      // e, com a janela de revisita, quase tudo que volta é idêntico.
-      if (
-        existente.description === campos.description &&
-        existente.amount.equals(campos.amount) &&
-        existente.type === campos.type &&
-        existente.date.getTime() === campos.date.getTime() &&
-        existente.accountId === campos.accountId &&
-        existente.installmentIndex === campos.installmentIndex &&
-        existente.installmentTotal === campos.installmentTotal &&
-        existente.billMonth === campos.billMonth
-      ) {
+      if (naoMudou(existente, campos)) {
         continue;
       }
 
@@ -613,25 +668,9 @@ export async function repairAccount(userId: string, accountId: string): Promise<
     const existente = existentePorPluggyId.get(pTx.id);
     if (!existente) continue;
 
-    const campos = {
-      description: (pTx.description || pTx.descriptionRaw || "Transação sem descrição").trim(),
-      amount: new Prisma.Decimal(valorAbsoluto(pTx.amount)),
-      type: sinalDaTransacao(pTx.type, pTx.amount) as TransactionType,
-      date: new Date(pTx.date),
-      accountId: account.id,
-      ...dadosDeParcela(pTx),
-    };
+    const campos = camposDaTransacao(pTx, account.id);
 
-    if (
-      existente.description === campos.description &&
-      existente.amount.equals(campos.amount) &&
-      existente.type === campos.type &&
-      existente.date.getTime() === campos.date.getTime() &&
-      existente.accountId === campos.accountId &&
-      existente.installmentIndex === campos.installmentIndex &&
-      existente.installmentTotal === campos.installmentTotal &&
-      existente.billMonth === campos.billMonth
-    ) {
+    if (naoMudou(existente, campos)) {
       continue;
     }
 
