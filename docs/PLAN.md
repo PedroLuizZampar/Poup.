@@ -172,6 +172,14 @@ Poup/
     `balanceDueDate` da Pluggy e obrigatório na edição (padrão 10)
 49. Reparo do histórico já importado, uma conta por requisição — só reescreve o
     que existe, não importa transação nova
+50. Competência: cada transação sabe em que mês ela **conta**, e é por ela que
+    relatórios, orçamentos e a lista mensal somam — uma compra em 10x deixou de
+    pesar inteira no mês da compra
+51. Vencimento da parcela deslocado pelo número dela (`billForecastDate` vale
+    para a primeira; cada seguinte anda um mês) e postergado ao próximo dia
+    útil, com feriados nacionais calculados da Páscoa
+52. Parcelas de uma mesma compra reunidas num dropdown, ordenadas, com o total
+    da compra no fim
 
 ## Backlog (planejado, **não** implementado)
 
@@ -188,7 +196,8 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 | Widget Pluggy Connect | Descartado: a conexão é feita colando o id do item do painel da Pluggy |
 | Dia de fechamento da fatura | Não guardado; `billMonth` derivado erra em um mês para compra pós-fechamento |
 | Parser de `"PARC 3/12"` na descrição | Só o `creditCardMetadata` preenche parcela hoje |
-| Parcela em lançamento manual | Os três campos só são escritos pelo sync |
+| Conector que manda parcela mês a mês | O deslocamento `+(n-1)` assume que todas chegam juntas, como no Mercado Pago |
+| Parcela em lançamento manual | Os três campos só são escritos pelo sync, e a competência de lançamento manual é sempre a própria data |
 
 Outros pendentes conhecidos:
 
