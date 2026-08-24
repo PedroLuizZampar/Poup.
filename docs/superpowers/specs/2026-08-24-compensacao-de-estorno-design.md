@@ -143,23 +143,34 @@ candidata.
 
 ### 3. Onde as linhas saem dos totais
 
-São quatro consultas, e nenhuma a mais:
+São cinco consultas:
 
 | Lugar | O que soma |
 |---|---|
-| `reports.service.ts` → `totalsByType` | receita e despesa do período |
-| `reports.service.ts` → `expensesByCategory` | a rosca de despesa por categoria |
-| `reports.service.ts` → `monthlySeries` | a série mensal (SQL cru) |
-| `budgets.service.ts:126` | o gasto do mês contra o limite |
+| `reports.service.ts:107` → `totalsByType` | receita e despesa do período |
+| `reports.service.ts:139` → `expensesByCategory` | a rosca de despesa por categoria |
+| `reports.service.ts:242` → `monthlySeries` | a série mensal (SQL cru) |
+| `budgets.service.ts:38` → `listBudgets` | o gasto de cada orçamento na tela |
+| `budgets.service.ts:126` → `upsertBudget` | o gasto devolvido ao salvar um orçamento |
 
 As três de relatório já recebem `transferId` e ganham a cláusula de
 `compensationId` do mesmo jeito.
 
-A do orçamento merece atenção porque **hoje não exclui nada**: ela filtra por
-`categoryId`, e como categoria de sistema nunca tem orçamento, transferência
-ficava de fora por acidente. Compensação não fica — a compra mantém a categoria
-"Outros". Esquecer essa linha faz a compra compensada continuar consumindo o
+As duas de orçamento merecem atenção porque **hoje não excluem nada**. Filtram
+por `categoryId`, e como categoria de sistema nunca tem orçamento, transferência
+fica de fora por acidente. Compensação não fica — a compra mantém a categoria
+"Outros". Esquecer uma delas faz a compra compensada continuar consumindo o
 orçamento, sem nada na tela explicando por quê.
+
+A de `listBudgets` é a mais fácil de perder de vista, e por dois motivos: é ela
+que alimenta a tela (a de `upsertBudget` só roda no instante em que se salva um
+orçamento), e ela não usa `aggregate` nem `groupBy` — faz um `findMany` e soma
+em JavaScript. Procurar por funções de agregação não a encontra.
+
+**E as que não podem mudar:** a listagem de transações
+(`transactions.service.ts:184`) e o dropdown de parcelas
+(`transactions.service.ts:371`). Linha compensada continua visível — é por ela
+que se desfaz. Filtrar ali esconderia a compensação de quem quer revertê-la.
 
 ### 4. API
 
@@ -250,7 +261,10 @@ inclusive.
 ## Riscos
 
 **Esquecer uma consulta de agregação.** É o risco central, e o único que produz
-erro silencioso. Mitigação: o teste de exclusão cobre as quatro nominalmente.
+erro silencioso. Ele já se materializou uma vez: a primeira versão deste spec
+dizia "quatro consultas, e nenhuma a mais", e a revisão do plano encontrou a
+quinta — `listBudgets`, justamente a que alimenta a tela. Mitigação: teste
+automatizado cobrindo as cinco nominalmente, e não uma busca por nome de função.
 
 **A pessoa compensar a compra errada.** Duas compras de mesmo total na mesma
 conta existem. A pré-seleção por valor não desempata sozinha, então a lista
