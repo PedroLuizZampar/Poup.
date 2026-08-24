@@ -6,6 +6,16 @@ import { formatDate } from "../../lib/format";
 
 export interface InstallmentGroupProps {
   transaction: TransactionDTO;
+  /**
+   * Quantas parcelas desta compra a lista ja reuniu nesta linha.
+   *
+   * Muda o que o selo diz, porque a linha significa coisas diferentes nos dois
+   * casos: quando a lista reuniu a compra inteira, a linha **e** a compra e o
+   * selo anuncia o parcelamento ("8x"); quando so uma parcela esta ali — o
+   * painel e a tela de categorias filtram por mes —, a linha e aquela parcela e
+   * o selo diz qual ela e ("3/8").
+   */
+  agrupadas?: number;
 }
 
 /**
@@ -16,13 +26,18 @@ export interface InstallmentGroupProps {
  * outras nove, quando caem?". Por isso ele carrega sob demanda: quase ninguém
  * abre, e trazer as dez em toda listagem multiplicaria a resposta por dez.
  */
-export function InstallmentGroup({ transaction }: InstallmentGroupProps) {
+export function InstallmentGroup({ transaction, agrupadas }: InstallmentGroupProps) {
   const [aberto, setAberto] = useState(false);
   const [dados, setDados] = useState<InstallmentsResponse | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   if (!transaction.installmentTotal) return null;
+
+  const compraInteira = (agrupadas ?? 1) > 1;
+  const rotulo = compraInteira
+    ? `${transaction.installmentTotal}x`
+    : `${transaction.installmentIndex}/${transaction.installmentTotal}`;
 
   async function alternar(e: React.MouseEvent | React.KeyboardEvent) {
     // A linha inteira abre o modal de detalhe: o selo não pode abrir os dois.
@@ -70,7 +85,7 @@ export function InstallmentGroup({ transaction }: InstallmentGroupProps) {
         title={`Ver as ${transaction.installmentTotal} parcelas desta compra`}
         className="shrink-0 text-[10px] font-bold tnum px-1.5 py-0.5 rounded-chip bg-surface-sunken border border-border text-text-secondary hover:border-border-strong hover:text-text-primary transition-colors focus-ring cursor-pointer"
       >
-        {transaction.installmentIndex}/{transaction.installmentTotal}
+        {rotulo}
       </span>
 
       {aberto && (
@@ -88,7 +103,9 @@ export function InstallmentGroup({ transaction }: InstallmentGroupProps) {
             <div
               key={parcela.id}
               className={`flex items-center justify-between gap-3 text-[11px] px-1.5 py-1 rounded-ctl ${
-                parcela.id === transaction.id
+                // So ha parcela a destacar quando a linha e uma parcela. Se ela
+                // e a compra inteira, destacar a 1a seria apontar para nada.
+                !compraInteira && parcela.id === transaction.id
                   ? "bg-primary-soft text-text-primary font-semibold"
                   : "text-text-secondary"
               }`}

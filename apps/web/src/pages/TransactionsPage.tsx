@@ -20,6 +20,7 @@ import { displayCategory } from "../lib/categories";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
 import { Money } from "../components/ui/Money";
 import { InstallmentGroup } from "../components/transactions/InstallmentGroup";
+import { agruparCompras } from "../lib/agruparCompras";
 
 /** "2026-08-20" -> "20/08/2026". Sem passar por Date: o input entrega o dia
  *  já no fuso do usuário, e reinterpretá-lo em UTC o atrasaria em um. */
@@ -193,6 +194,15 @@ export function TransactionsPage() {
     for (const account of accounts) map[account.id] = account;
     return map;
   }, [accounts]);
+
+  /**
+   * As linhas da lista — que nao sao uma por transacao.
+   *
+   * Uma compra parcelada chega como N transacoes com a mesma data e a mesma
+   * descricao; exibi-las soltas enche a tela de linhas identicas. Aqui elas
+   * viram uma linha so, e o dropdown do selo abre o parcelamento.
+   */
+  const linhas = useMemo(() => agruparCompras(transactions), [transactions]);
 
   const hasDateFilter = Boolean(startDate || endDate);
   const hasAmountFilter = minAmount > 0 || maxAmount > 0;
@@ -648,7 +658,7 @@ export function TransactionsPage() {
                 página que rola na vertical, que é a interação que mais confunde
                 no toque. Aqui a linha inteira é um único alvo. */}
             <ul className="md:hidden divide-y divide-border">
-              {transactions.map((tx) => {
+              {linhas.map(({ tx, parcelas, valor }) => {
                 const cat = displayCategory(tx.categoryId ? categoryMap[tx.categoryId] : null);
                 return (
                   <li key={tx.id}>
@@ -669,7 +679,7 @@ export function TransactionsPage() {
                               <span className="font-semibold text-sm text-text-primary truncate">
                                 {tx.description}
                               </span>
-                              <InstallmentGroup transaction={tx} />
+                              <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
                             </div>
                             {tx.note && (
                               <div className="text-[11px] text-text-disabled truncate">
@@ -706,7 +716,7 @@ export function TransactionsPage() {
                           }`}
                         >
                           {tx.type === "INCOME" ? "+ " : "- "}
-                          <Money value={tx.amount} />
+                          <Money value={valor} />
                         </span>
                       </div>
                     </button>
@@ -732,7 +742,7 @@ export function TransactionsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border text-body-sm">
-                  {transactions.map((tx) => {
+                  {linhas.map(({ tx, parcelas, valor }) => {
                     const cat = displayCategory(
                       tx.categoryId ? categoryMap[tx.categoryId] : null
                     );
@@ -756,7 +766,7 @@ export function TransactionsPage() {
                                 <span className="font-semibold text-xs md:text-sm text-text-primary truncate">
                                   {tx.description}
                                 </span>
-                                <InstallmentGroup transaction={tx} />
+                                <InstallmentGroup transaction={tx} agrupadas={parcelas?.length} />
                               </div>
                               {tx.note && (
                                 <div className="text-[11px] text-text-disabled truncate">
@@ -797,7 +807,7 @@ export function TransactionsPage() {
                           }`}
                         >
                           {tx.type === "INCOME" ? "+ " : "- "}
-                          <Money value={tx.amount} />
+                          <Money value={valor} />
                         </td>
                       </tr>
                     );
