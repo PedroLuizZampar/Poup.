@@ -11,6 +11,11 @@ import {
   bulkCategorize,
   findSimilarTransactions,
 } from "../categorization/similar.service";
+import {
+  compensar,
+  desfazerCompensacao,
+  listarCandidatas,
+} from "./compensacao.service";
 import { ForbiddenError, TransactionNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
 import { asyncHandler } from "../../middleware/errorHandler";
@@ -35,6 +40,10 @@ const updateTransactionSchema = z.object({
   categoryId: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   isRecurring: z.boolean().optional(),
+});
+
+const compensateSchema = z.object({
+  purchaseKey: z.string().min(1, "Compra é obrigatória"),
 });
 
 const queryFilterSchema = z.object({
@@ -96,6 +105,36 @@ transactionsRouter.get(
   asyncHandler(async (req, res) => {
     const result = await listInstallments(req.userId!, req.params.id);
     res.json(result);
+  })
+);
+
+/**
+ * Compensacao de estorno: ligar um credito as parcelas da compra que ele
+ * cancela, e desfazer o vinculo.
+ *
+ * Antes de "/:id" pelo mesmo motivo de "/:id/installments": sem isso o Express
+ * casaria "abc/compensation" como um id. O DELETE tambem precisa vir antes do
+ * `delete("/:id")` la embaixo, que recusa exclusao sempre.
+ */
+transactionsRouter.get(
+  "/:id/compensation/candidates",
+  asyncHandler(async (req, res) => {
+    res.json(await listarCandidatas(req.userId!, req.params.id));
+  })
+);
+
+transactionsRouter.post(
+  "/:id/compensation",
+  asyncHandler(async (req, res) => {
+    const { purchaseKey } = compensateSchema.parse(req.body);
+    res.json(await compensar(req.userId!, req.params.id, purchaseKey));
+  })
+);
+
+transactionsRouter.delete(
+  "/:id/compensation",
+  asyncHandler(async (req, res) => {
+    res.json(await desfazerCompensacao(req.userId!, req.params.id));
   })
 );
 

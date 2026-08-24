@@ -109,6 +109,31 @@ export interface InstallmentsResponse {
   total: number;
 }
 
+export type CompensationIneligibleReason = "valor-diferente" | "ja-compensado";
+
+export interface CompensationCandidateDTO {
+  purchaseKey: string;
+  description: string;
+  /** ISO da data da compra, ou null quando o conector nao informou. */
+  purchaseDate: string | null;
+  installmentTotal: number;
+  /** Quantas parcelas o app importou. Menor que o total significa historico cortado. */
+  parcelasConhecidas: number;
+  /** Total da compra, em reais. */
+  total: number;
+  elegivel: boolean;
+  motivo: CompensationIneligibleReason | null;
+  preSelecionada: boolean;
+}
+
+export interface CompensationCandidatesResponse {
+  candidates: CompensationCandidateDTO[];
+}
+
+export interface CompensateRequest {
+  purchaseKey: string;
+}
+
 export interface BudgetDTO {
   id: string;
   categoryId: string;
