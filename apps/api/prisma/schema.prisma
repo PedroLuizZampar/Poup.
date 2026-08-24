@@ -95,6 +95,7 @@ model User {
   goals         Goal[]
   notifications Notification[]
   categorySuggestions CategorySuggestion[]
+  creditCardBills CreditCardBill[]
 }
 
 model Item {
@@ -113,6 +114,11 @@ model Item {
   customImageUrl      String?    @db.Text
   status         ItemStatus @default(UPDATING)
   lastSyncedAt   DateTime?
+  /// O webhook avisou que ha transacao nova nesta conexao, e o sync ainda nao
+  /// rodou. E so um aviso na tela: o app nunca sincroniza sozinho, porque o
+  /// tempo de uma funcao serverless nao comporta um sync de tamanho
+  /// desconhecido disparado por evento externo.
+  hasPendingSync Boolean    @default(false)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -156,8 +162,41 @@ model Account {
   item         Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
   transactions Transaction[]
   goals        Goal[]
+  creditCardBills CreditCardBill[]
 
   @@index([userId])
+}
+
+/// A fatura do cartao, como a instituicao a fecha.
+///
+/// Existe por duas razoes. A primeira e o `payments[]` que a Pluggy devolve: e
+/// a propria instituicao dizendo que a fatura foi paga, em que dia e por quanto
+/// — o unico jeito de reconhecer o debito na conta corrente sem adivinhar pela
+/// descricao. A segunda e servir de ancora para `Transaction.pluggyBillId`.
+///
+/// Nunca vira linha de despesa. A despesa sao as compras; a fatura e o agregado
+/// delas, e soma-la ao lado das transacoes contaria tudo duas vezes.
+model CreditCardBill {
+  id           String    @id @default(uuid())
+  userId       String
+  accountId    String
+  pluggyBillId String    @unique
+  dueDate      DateTime
+  /// Quando a instituicao fechou a fatura. Nulo enquanto ela esta aberta.
+  closingDate  DateTime?
+  totalAmount  Decimal   @db.Decimal(14, 2)
+  /// Data e valor do pagamento reportado pela instituicao. Nulos enquanto a
+  /// fatura nao foi paga — e e a presenca deles que dispara o reconhecimento.
+  paidAt       DateTime?
+  paidAmount   Decimal?  @db.Decimal(14, 2)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dueDate])
+  @@index([accountId])
 }
 
 model Category {
@@ -226,6 +265,10 @@ model Transaction {
   /// Junta as parcelas de uma mesma compra. Derivada (ver lib/purchaseKey.ts),
   /// porque a Pluggy nao manda identificador de compra nenhum.
   purchaseKey         String?
+  /// A fatura a que a Pluggy vinculou esta linha, quando ja vinculou. Chega
+  /// vazio enquanto a fatura esta aberta (`status: PENDING`) e e preenchido no
+  /// fechamento — e o evento `transactions/updated` que avisa.
+  pluggyBillId        String?
   /// Une as duas pontas de uma transferência interna detectada. Torna o
   /// pareamento idempotente e permite desfazer nas duas pontas de uma vez.
   transferPairId      String?
@@ -242,6 +285,7 @@ model Transaction {
   @@index([categoryId])
   @@index([transferPairId])
   @@index([purchaseKey])
+  @@index([pluggyBillId])
 }
 
 model Budget {
