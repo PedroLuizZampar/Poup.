@@ -664,8 +664,15 @@ export function TransactionsPage() {
                             size="sm"
                           />
                           <div className="min-w-0">
-                            <div className="font-semibold text-sm text-text-primary truncate">
-                              {tx.description}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-semibold text-sm text-text-primary truncate">
+                                {tx.description}
+                              </span>
+                              {tx.installmentTotal && (
+                                <span className="shrink-0 text-[10px] font-bold tnum px-1.5 py-0.5 rounded-chip bg-surface-sunken border border-border text-text-secondary">
+                                  {tx.installmentIndex}/{tx.installmentTotal}
+                                </span>
+                              )}
                             </div>
                             {tx.note && (
                               <div className="text-[11px] text-text-disabled truncate">
@@ -748,8 +755,15 @@ export function TransactionsPage() {
                               size="sm"
                             />
                             <div className="min-w-0">
-                              <div className="font-semibold text-xs md:text-sm text-text-primary truncate">
-                                {tx.description}
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-semibold text-xs md:text-sm text-text-primary truncate">
+                                  {tx.description}
+                                </span>
+                                {tx.installmentTotal && (
+                                  <span className="shrink-0 text-[10px] font-bold tnum px-1.5 py-0.5 rounded-chip bg-surface-sunken border border-border text-text-secondary">
+                                    {tx.installmentIndex}/{tx.installmentTotal}
+                                  </span>
+                                )}
                               </div>
                               {tx.note && (
                                 <div className="text-[11px] text-text-disabled truncate">

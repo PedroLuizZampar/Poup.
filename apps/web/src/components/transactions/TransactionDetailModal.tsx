@@ -149,6 +149,32 @@ export function TransactionDetailModal({
           </div>
         </div>
 
+        {/* Parcela só aparece quando existe — a maioria das transações não é
+            parcelada, e um "Parcela —" ocuparia linha para dizer nada. O
+            vencimento vem do dia cadastrado no cartão; sem ele, some. */}
+        {transaction.installmentTotal && (
+          <div className="p-3.5 rounded-card bg-surface-alt/60 border border-border flex items-center justify-between gap-3">
+            <div>
+              <span className="text-overline uppercase tracking-wider text-text-secondary block">
+                Parcelamento
+              </span>
+              <span className="text-xs font-semibold text-text-primary tnum">
+                Parcela {transaction.installmentIndex} de {transaction.installmentTotal}
+              </span>
+            </div>
+            {transaction.dueDate && (
+              <div className="text-right shrink-0">
+                <span className="text-overline uppercase tracking-wider text-text-secondary block">
+                  Vencimento
+                </span>
+                <span className="text-xs font-semibold text-text-primary tnum">
+                  {formatDate(transaction.dueDate)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Descrição */}
         <Field id="tx-desc" label="Descrição" required>
           <Input
