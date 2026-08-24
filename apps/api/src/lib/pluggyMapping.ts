@@ -1,4 +1,5 @@
 import type { Account as PluggyAccount, Transaction as PluggyTransaction } from "pluggy-sdk";
+import { proximoDiaUtil } from "./diasUteis";
 
 /**
  * O que a Pluggy manda, traduzido — e nada mais.
@@ -53,25 +54,52 @@ function chaveDeMes(ano: number, mes: number): string {
 /**
  * O mes da fatura em que a transacao cai, como "YYYY-MM".
  *
- * Quando o conector e Open Finance, a Pluggy manda `billForecastDate` — o mes
- * que o proprio banco projetou, valido inclusive para lancamento pendente. Ele
- * ganha sempre.
+ * Duas fontes, nesta ordem: o `billForecastDate` que a Pluggy manda nos
+ * conectores Open Finance, e — sem ele — o mes da transacao mais um.
  *
- * Sem ele, deriva: mes da transacao mais um. Cada parcela ja chega como uma
- * transacao na fatura dela, entao o numero da parcela nao entra nesta conta.
+ * Sobre as duas incide o deslocamento da parcela. O motivo e concreto: o
+ * Mercado Pago entrega uma compra em 10x como dez transacoes de uma vez, todas
+ * com a data da compra e **todas com o mesmo `billForecastDate`**. Tomado ao pe
+ * da letra, o campo joga as dez na mesma fatura. O que ele diz, na pratica, e
+ * qual e a fatura da *primeira* parcela; da segunda em diante, cada uma anda um
+ * mes.
+ *
+ * Compra a vista tem `installmentNumber` ausente e nao desloca nada.
  *
  * A derivacao erra em um mes para compra feita depois do fechamento da fatura.
  * Modelar fechamento exigiria guardar o dia de fechamento e decidir o que fazer
  * quando ele muda, e so melhoraria os conectores que ja nao mandam
  * `billForecastDate`. Esta anotado no Backlog do spec.
  */
-export function mesDaFatura(data: Date, billForecastDate?: string | null): string {
+export function mesDaFatura(
+  data: Date,
+  billForecastDate?: string | null,
+  installmentNumber?: number | null
+): string {
+  let ano: number;
+  let mes: number; // 1-based
+
   if (billForecastDate && /^\d{4}-(0[1-9]|1[0-2])$/.test(billForecastDate)) {
-    return billForecastDate;
+    const [a, m] = billForecastDate.split("-").map(Number);
+    ano = a;
+    mes = m;
+  } else {
+    const proximo = new Date(Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + 1, 1));
+    ano = proximo.getUTCFullYear();
+    mes = proximo.getUTCMonth() + 1;
   }
 
-  const proximo = new Date(Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + 1, 1));
-  return chaveDeMes(proximo.getUTCFullYear(), proximo.getUTCMonth() + 1);
+  const deslocamento =
+    typeof installmentNumber === "number" &&
+    Number.isInteger(installmentNumber) &&
+    installmentNumber >= 1
+      ? installmentNumber - 1
+      : 0;
+
+  // Deixar o `Date` normalizar o excesso de meses e o que faz a virada de ano
+  // sair de graca: mes 18 de 2026 vira junho de 2027.
+  const deslocado = new Date(Date.UTC(ano, mes - 1 + deslocamento, 1));
+  return chaveDeMes(deslocado.getUTCFullYear(), deslocado.getUTCMonth() + 1);
 }
 
 export interface DadosDeParcela {
@@ -105,9 +133,12 @@ export function dadosDeParcela(
     return { installmentIndex: null, installmentTotal: null, billMonth: null };
   }
 
-  const billMonth = mesDaFatura(new Date(pTx.date), meta.billForecastDate);
   const total = inteiroNaFaixa(meta.totalInstallments, 1, 999);
   const indice = total === null ? null : inteiroNaFaixa(meta.installmentNumber, 1, total);
+
+  // O deslocamento usa o indice **ja validado**: uma parcela "0 de 10" nao pode
+  // empurrar a fatura para tras.
+  const billMonth = mesDaFatura(new Date(pTx.date), meta.billForecastDate, indice);
 
   return indice === null
     ? { installmentIndex: null, installmentTotal: null, billMonth }
@@ -122,6 +153,9 @@ export function dadosDeParcela(
  *
  * O limite ao ultimo dia do mes existe para vencimento 31 em fevereiro. Sem
  * ele, `Date.UTC(2026, 1, 31)` vira 3 de marco em silencio.
+ *
+ * O resultado passa pelo calendario de dias uteis: vencimento em fim de semana
+ * ou feriado anda para o proximo dia util, que e o que o emissor faz.
  */
 export function vencimentoDaFatura(billMonth: string | null, dueDay: number | null): Date | null {
   if (!billMonth || dueDay == null) return null;
@@ -131,7 +165,10 @@ export function vencimentoDaFatura(billMonth: string | null, dueDay: number | nu
   const [ano, mes] = billMonth.split("-").map(Number);
   // Dia 0 do mes seguinte e o ultimo dia deste.
   const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
-  return new Date(Date.UTC(ano, mes - 1, Math.min(dueDay, ultimoDia)));
+  const nominal = new Date(Date.UTC(ano, mes - 1, Math.min(dueDay, ultimoDia)));
+  // O emissor nao cobra em sabado, domingo ou feriado: posterga. Mostrar a data
+  // nominal faria o app discordar do banco em alguns dias por ano.
+  return proximoDiaUtil(nominal);
 }
 
 /**
@@ -150,4 +187,20 @@ export function diaDeVencimentoInicial(pAccount: Pick<PluggyAccount, "creditData
 
   const dia = data.getUTCDate();
   return dia >= 1 && dia <= 31 ? dia : DIA_DE_VENCIMENTO_PADRAO;
+}
+
+/**
+ * O mes em que a transacao conta, como data — sempre o primeiro dia dele.
+ *
+ * Transacao de cartao conta no mes da fatura: e la que a despesa pesa no
+ * orcamento. Todo o resto conta no proprio dia.
+ *
+ * Fixar o dia 1 nao e detalhe: e o que mantem a coluna independente do dia de
+ * vencimento do cartao. Guardasse o vencimento, mudar `creditCardDueDay`
+ * exigiria reescrever a competencia de todas as parcelas.
+ */
+export function competenciaDaTransacao(date: Date, billMonth: string | null): Date {
+  if (!billMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(billMonth)) return date;
+  const [ano, mes] = billMonth.split("-").map(Number);
+  return new Date(Date.UTC(ano, mes - 1, 1));
 }

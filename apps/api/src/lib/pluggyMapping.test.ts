@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DIA_DE_VENCIMENTO_PADRAO,
+  competenciaDaTransacao,
   dadosDeParcela,
   diaDeVencimentoInicial,
   mesDaFatura,
@@ -93,19 +94,48 @@ describe("mesDaFatura", () => {
   it("mantem o mes em dois digitos", () => {
     expect(mesDaFatura(new Date("2026-01-05T00:00:00Z"))).toBe("2026-02");
   });
+
+  // O caso que motivou este plano: o Mercado Pago manda as dez parcelas de uma
+  // vez, todas com a mesma data e o mesmo billForecastDate. Sem o deslocamento
+  // as dez cairiam na mesma fatura.
+  it("a parcela 1 nao desloca", () => {
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 1)).toBe("2026-09");
+  });
+
+  it("a parcela 3 anda dois meses", () => {
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 3)).toBe("2026-11");
+  });
+
+  it("a ultima parcela de um 10x vira o ano", () => {
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 10)).toBe("2027-06");
+  });
+
+  it("desloca tambem quando o mes foi derivado, e nao recebido", () => {
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), null, 3)).toBe("2026-11");
+  });
+
+  it("parcela ausente ou invalida nao desloca", () => {
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", null)).toBe("2026-09");
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 0)).toBe("2026-09");
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 1.5)).toBe("2026-09");
+  });
 });
 
 describe("dadosDeParcela", () => {
   it("le numero e total do creditCardMetadata", () => {
+    // O mes derivado da compra e 2026-09, e a parcela 3 anda dois meses a
+    // partir dele: e a fatura desta parcela, nao a da compra.
     expect(
       dadosDeParcela({
         date: new Date("2026-08-10T00:00:00Z"),
         creditCardMetadata: { installmentNumber: 3, totalInstallments: 10 },
       } as any)
-    ).toEqual({ installmentIndex: 3, installmentTotal: 10, billMonth: "2026-09" });
+    ).toEqual({ installmentIndex: 3, installmentTotal: 10, billMonth: "2026-11" });
   });
 
   it("prefere o billForecastDate para o mes da fatura", () => {
+    // O billForecastDate e a fatura da **primeira** parcela; a terceira anda
+    // dois meses sobre ele.
     expect(
       dadosDeParcela({
         date: new Date("2026-08-10T00:00:00Z"),
@@ -115,7 +145,7 @@ describe("dadosDeParcela", () => {
           billForecastDate: "2026-11",
         },
       } as any)
-    ).toEqual({ installmentIndex: 3, installmentTotal: 10, billMonth: "2026-11" });
+    ).toEqual({ installmentIndex: 3, installmentTotal: 10, billMonth: "2027-01" });
   });
 
   it("sem creditCardMetadata, os tres campos ficam nulos", () => {
@@ -170,17 +200,32 @@ describe("dadosDeParcela", () => {
 
 describe("vencimentoDaFatura", () => {
   it("combina o mes da fatura com o dia da conta", () => {
+    // 10/09/2026 e uma quinta-feira: nao anda.
     expect(vencimentoDaFatura("2026-09", 10)?.toISOString()).toBe("2026-09-10T00:00:00.000Z");
   });
 
   it("limita ao ultimo dia do mes", () => {
     // Vencimento 31 em fevereiro nao pode virar 3 de marco em silencio, que e
-    // o que `Date.UTC(2026, 1, 31)` faz sozinho.
-    expect(vencimentoDaFatura("2026-02", 31)?.toISOString()).toBe("2026-02-28T00:00:00.000Z");
+    // o que `Date.UTC(2026, 1, 31)` faz sozinho. 28/02/2026 e sabado, entao
+    // depois do limite ainda anda para segunda.
+    expect(vencimentoDaFatura("2026-02", 31)?.toISOString()).toBe("2026-03-02T00:00:00.000Z");
   });
 
-  it("respeita ano bissexto", () => {
-    expect(vencimentoDaFatura("2028-02", 31)?.toISOString()).toBe("2028-02-29T00:00:00.000Z");
+  it("respeita ano bissexto antes de decidir o dia util", () => {
+    // 29/02/2036 e uma sexta-feira comum: o limite manda, e o dia util nao
+    // desloca nada. 2028 nao serve de exemplo porque naquele ano o 29 cai na
+    // terca de Carnaval.
+    expect(vencimentoDaFatura("2036-02", 31)?.toISOString()).toBe("2036-02-29T00:00:00.000Z");
+  });
+
+  it("posterga vencimento que cai em fim de semana", () => {
+    // 12/09/2026 e sabado.
+    expect(vencimentoDaFatura("2026-09", 12)?.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+  });
+
+  it("posterga vencimento que cai em feriado", () => {
+    // 07/09/2026 e segunda-feira e feriado nacional.
+    expect(vencimentoDaFatura("2026-09", 7)?.toISOString()).toBe("2026-09-08T00:00:00.000Z");
   });
 
   it("sem dia de vencimento, nao ha data", () => {
@@ -224,5 +269,27 @@ describe("diaDeVencimentoInicial", () => {
 
   it("cai no padrao quando a data e invalida", () => {
     expect(diaDeVencimentoInicial({ creditData: { balanceDueDate: "amanha" } } as any)).toBe(10);
+  });
+});
+
+describe("competenciaDaTransacao", () => {
+  it("sem fatura, a competencia e a propria data", () => {
+    const data = new Date("2026-08-22T14:30:00Z");
+    expect(competenciaDaTransacao(data, null).toISOString()).toBe("2026-08-22T14:30:00.000Z");
+  });
+
+  it("com fatura, e o primeiro dia do mes dela", () => {
+    // O dia nao importa e nao pode importar: a competencia e mensal, e fixar o
+    // dia 1 e o que a mantem independente de `creditCardDueDay`.
+    expect(
+      competenciaDaTransacao(new Date("2026-08-22T14:30:00Z"), "2026-11").toISOString()
+    ).toBe("2026-11-01T00:00:00.000Z");
+  });
+
+  it("mes malformado nao inventa competencia", () => {
+    const data = new Date("2026-08-22T14:30:00Z");
+    expect(competenciaDaTransacao(data, "setembro").toISOString()).toBe(
+      "2026-08-22T14:30:00.000Z"
+    );
   });
 });
