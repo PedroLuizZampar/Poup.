@@ -86,6 +86,21 @@ export interface TransactionDTO {
    * cartao conserte todas as parcelas de uma vez.
    */
   dueDate: string | null;
+  /**
+   * O mes em que a transacao conta (ISO, sempre dia 1 quando vem de fatura).
+   * Para cartao e o mes da fatura; para o resto e o proprio dia. E por ele que
+   * relatorio, orcamento e a lista mensal somam.
+   */
+  competenceDate: string;
+  /** Junta as parcelas de uma mesma compra. Null quando nao ha o que agrupar. */
+  purchaseKey: string | null;
+}
+
+export interface InstallmentsResponse {
+  /** As parcelas da compra, ordenadas por numero. */
+  installments: TransactionDTO[];
+  /** A soma das parcelas conhecidas — o valor da compra. */
+  total: number;
 }
 
 export interface BudgetDTO {

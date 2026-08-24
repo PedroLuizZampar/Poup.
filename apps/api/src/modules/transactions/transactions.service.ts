@@ -4,7 +4,7 @@ import {
   Prisma,
   SystemCategoryKey,
 } from "@prisma/client";
-import type { TransactionDTO, TransactionType } from "@poup/shared";
+import type { InstallmentsResponse, TransactionDTO, TransactionType } from "@poup/shared";
 import {
   AccountNotFoundError,
   CategoryNotFoundError,
@@ -76,6 +76,8 @@ export function formatTransactionDTO(tx: {
   installmentIndex: number | null;
   installmentTotal: number | null;
   billMonth: string | null;
+  competenceDate: Date;
+  purchaseKey: string | null;
 }): TransactionDTO {
   return {
     id: tx.id,
@@ -94,6 +96,8 @@ export function formatTransactionDTO(tx: {
     // Derivado, nao guardado: o dia de vencimento mora na conta, e mudar la tem
     // de consertar todas as parcelas de uma vez.
     dueDate: vencimentoDaFatura(tx.billMonth, tx.account.creditCardDueDay)?.toISOString() ?? null,
+    competenceDate: tx.competenceDate.toISOString(),
+    purchaseKey: tx.purchaseKey,
   };
 }
 
@@ -333,4 +337,50 @@ export async function updateTransaction(
   }
 
   return formatTransactionDTO(updated);
+}
+
+/**
+ * As parcelas da compra a que uma transacao pertence.
+ *
+ * Vive num endpoint proprio, e nao embutido na listagem, porque a lista mensal
+ * mostra **uma** parcela por compra: mandar as dez em toda listagem seria
+ * multiplicar a resposta por dez para alimentar um dropdown que quase nunca e
+ * aberto.
+ *
+ * O par (id, userId) e o que prova posse — id sozinho nao prova nada.
+ */
+export async function listInstallments(
+  userId: string,
+  transactionId: string
+): Promise<InstallmentsResponse> {
+  const base = await prisma.transaction.findFirst({
+    where: { id: transactionId, userId },
+    select: { purchaseKey: true },
+  });
+
+  if (!base) {
+    throw new TransactionNotFoundError();
+  }
+
+  // Compra a vista nao tem grupo. Devolver a propria linha seria mentir que ha
+  // um parcelamento de um item so.
+  if (!base.purchaseKey) {
+    return { installments: [], total: 0 };
+  }
+
+  const rows = await prisma.transaction.findMany({
+    where: { userId, purchaseKey: base.purchaseKey },
+    include: TX_INCLUDE,
+    orderBy: [{ installmentIndex: "asc" }, { competenceDate: "asc" }],
+  });
+
+  const installments = rows.map(formatTransactionDTO);
+  // A soma das parcelas que existem, e nao `creditCardMetadata.totalAmount`: se
+  // o historico so trouxe seis das dez, o total tem de dizer seis — um numero
+  // que nao bate com as linhas exibidas e pior que numero nenhum.
+  const total = Number(
+    installments.reduce((soma, t) => soma + t.amount, 0).toFixed(2)
+  );
+
+  return { installments, total };
 }

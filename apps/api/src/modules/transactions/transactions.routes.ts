@@ -5,6 +5,7 @@ import {
   getTransactionById,
   createTransaction,
   updateTransaction,
+  listInstallments,
 } from "./transactions.service";
 import {
   bulkCategorize,
@@ -80,6 +81,21 @@ transactionsRouter.get(
   asyncHandler(async (req, res) => {
     const categoryId = z.string().min(1).parse(req.query.categoryId);
     res.json(await findSimilarTransactions(req.userId!, req.params.id, categoryId));
+  })
+);
+
+/**
+ * As parcelas da compra a que esta transação pertence. Endpoint próprio porque
+ * a lista mensal traz uma parcela por compra, e as demais só interessam quando
+ * o usuário abre o dropdown.
+ *
+ * Antes de "/:id": sem isso o Express casaria "abc/installments" como um id.
+ */
+transactionsRouter.get(
+  "/:id/installments",
+  asyncHandler(async (req, res) => {
+    const result = await listInstallments(req.userId!, req.params.id);
+    res.json(result);
   })
 );
 
