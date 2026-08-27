@@ -31,7 +31,7 @@ notificationsRouter.get(
 notificationsRouter.post(
   "/check",
   asyncHandler(async (req, res) => {
-    const count = await generateAutomaticAlerts(req.userId!);
+    const count = await generateAutomaticAlerts(req.scope!);
     res.json({ generated: count });
   })
 );

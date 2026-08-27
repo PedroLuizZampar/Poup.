@@ -4,6 +4,7 @@ import type { NotificationDTO } from "@poup/shared";
 import { listBudgets } from "../budgets/budgets.service";
 import { NotificationNotFoundError } from "../../lib/errors";
 import type { ProcessResult } from "../categorization/categorization.service";
+import type { Scope } from "../../lib/scope";
 
 export { NotificationNotFoundError };
 
@@ -103,13 +104,16 @@ export async function listNotifications(userId: string): Promise<{
   };
 }
 
-export async function generateAutomaticAlerts(userId: string): Promise<number> {
+export async function generateAutomaticAlerts(scope: Scope): Promise<number> {
   let createdCount = 0;
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  // A notificação é individual — quem checou é quem recebe o aviso, mesmo o
+  // orçamento sendo do espaço inteiro.
+  const userId = scope.userId;
 
   // 1. Checar Orçamentos do mês atual
-  const budgets = await listBudgets(userId);
+  const budgets = await listBudgets(scope);
   for (const b of budgets) {
     if (b.status === "exceeded") {
       const title = `Orçamento estourado: ${b.categoryName}`;

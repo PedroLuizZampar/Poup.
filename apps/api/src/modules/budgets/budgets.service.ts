@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma";
 import { Prisma } from "@prisma/client";
 import type { BudgetDTO, BudgetStatus } from "@poup/shared";
+import type { Scope } from "../../lib/scope";
 import {
   BudgetNotFoundError,
   CategoryNotFoundError,
@@ -18,13 +19,13 @@ function parseMonth(monthStr?: string): [number, number] {
   return [now.getUTCFullYear(), now.getUTCMonth() + 1];
 }
 
-export async function listBudgets(userId: string, monthStr?: string): Promise<BudgetDTO[]> {
+export async function listBudgets(scope: Scope, monthStr?: string): Promise<BudgetDTO[]> {
   const [year, month] = parseMonth(monthStr);
   const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
   const startOfNextMonth = new Date(Date.UTC(year, month, 1, 0, 0, 0));
 
   const budgets = await prisma.budget.findMany({
-    where: { userId },
+    where: { householdId: scope.householdId },
     include: {
       category: {
         select: { id: true, name: true, icon: true, colorKey: true },
@@ -37,7 +38,9 @@ export async function listBudgets(userId: string, monthStr?: string): Promise<Bu
 
   const transactions = await prisma.transaction.findMany({
     where: {
-      userId,
+      // O orçamento é do casal: o teto mede o gasto dos dois somado, ou seria
+      // um teto que só um dos dois consegue estourar.
+      userId: { in: scope.memberIds },
       type: "EXPENSE",
       categoryId: { in: categoryIds },
       // Compra compensada não consome orçamento. Aqui a exclusão precisa ser
@@ -91,9 +94,13 @@ export async function listBudgets(userId: string, monthStr?: string): Promise<Bu
   });
 }
 
-export async function upsertBudget(userId: string, categoryId: string, monthlyLimit: number): Promise<BudgetDTO> {
+export async function upsertBudget(
+  scope: Scope,
+  categoryId: string,
+  monthlyLimit: number
+): Promise<BudgetDTO> {
   const category = await prisma.category.findFirst({
-    where: { id: categoryId, userId },
+    where: { id: categoryId, householdId: scope.householdId },
   });
   if (!category) {
     throw new CategoryNotFoundError();
@@ -104,8 +111,8 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
 
   const budget = await prisma.budget.upsert({
     where: {
-      userId_categoryId: {
-        userId,
+      householdId_categoryId: {
+        householdId: scope.householdId,
         categoryId,
       },
     },
@@ -113,7 +120,7 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
       monthlyLimit: new Prisma.Decimal(monthlyLimit),
     },
     create: {
-      userId,
+      householdId: scope.householdId,
       categoryId,
       monthlyLimit: new Prisma.Decimal(monthlyLimit),
     },
@@ -130,7 +137,8 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
 
   const totalSpentAgg = await prisma.transaction.aggregate({
     where: {
-      userId,
+      // Mesma soma do casal que o listBudgets faz, só que para uma categoria.
+      userId: { in: scope.memberIds },
       categoryId,
       type: "EXPENSE",
       compensationId: null,
@@ -163,9 +171,9 @@ export async function upsertBudget(userId: string, categoryId: string, monthlyLi
   };
 }
 
-export async function deleteBudget(userId: string, id: string): Promise<{ success: true }> {
+export async function deleteBudget(scope: Scope, id: string): Promise<{ success: true }> {
   const existing = await prisma.budget.findFirst({
-    where: { id, userId },
+    where: { id, householdId: scope.householdId },
   });
   if (!existing) {
     throw new BudgetNotFoundError();

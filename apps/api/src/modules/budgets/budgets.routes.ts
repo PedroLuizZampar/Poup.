@@ -24,7 +24,7 @@ budgetsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const month = typeof req.query.month === "string" ? req.query.month : undefined;
-    const budgets = await listBudgets(req.userId!, month);
+    const budgets = await listBudgets(req.scope!, month);
     res.json({ budgets });
   })
 );
@@ -33,7 +33,7 @@ budgetsRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const { categoryId, monthlyLimit } = upsertBudgetSchema.parse(req.body);
-    const budget = await upsertBudget(req.userId!, categoryId, monthlyLimit);
+    const budget = await upsertBudget(req.scope!, categoryId, monthlyLimit);
     res.status(201).json({ budget });
   })
 );
@@ -43,15 +43,15 @@ budgetsRouter.patch(
   asyncHandler(async (req, res) => {
     const { monthlyLimit } = updateBudgetSchema.parse(req.body);
 
-    // O orçamento é único por (usuário, categoria), então editar pelo id é
+    // O orçamento é único por (espaço, categoria), então editar pelo id é
     // reescrever o limite daquela categoria.
-    const existing = await listBudgets(req.userId!);
+    const existing = await listBudgets(req.scope!);
     const target = existing.find((b) => b.id === req.params.id);
     if (!target) {
       throw new BudgetNotFoundError();
     }
 
-    const budget = await upsertBudget(req.userId!, target.categoryId, monthlyLimit);
+    const budget = await upsertBudget(req.scope!, target.categoryId, monthlyLimit);
     res.json({ budget });
   })
 );
@@ -59,7 +59,7 @@ budgetsRouter.patch(
 budgetsRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deleteBudget(req.userId!, req.params.id);
+    await deleteBudget(req.scope!, req.params.id);
     res.json({ success: true });
   })
 );
