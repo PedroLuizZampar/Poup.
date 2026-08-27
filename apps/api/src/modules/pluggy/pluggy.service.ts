@@ -202,10 +202,18 @@ const JANELA_REVISITA_MS = JANELA_REVISITA_DIAS * 24 * 60 * 60 * 1000;
  *   preço é que a conexão nasce sabendo só o mês em que foi criada; o histórico
  *   anterior não vem, e não vem depois (a janela seguinte parte do que já
  *   existe).
- * - **Conta que já sincronizou**: trinta dias antes da transação mais recente.
- *   Nem tudo que muda é novo — lançamento pendente vira efetivado e muda valor
- *   e data dias depois de aparecer, e pedir só "o que veio depois da última"
- *   perderia essas correções.
+ * - **Conta que já sincronizou**: trinta dias antes da transação mais recente,
+ *   e nunca depois de hoje. Nem tudo que muda é novo — lançamento pendente vira
+ *   efetivado e muda valor e data dias depois de aparecer, e pedir só "o que
+ *   veio depois da última" perderia essas correções.
+ *
+ * O teto em `agora` não é zelo: cartão tem transação com data no futuro. O
+ * Nubank entrega cada parcela a vencer como uma linha datada no mês dela, então
+ * "a mais recente" de um parcelamento em 12x está a onze meses daqui. Sem o
+ * teto, a janela ia junto: o sync pedia o extrato a partir de abril de 2027,
+ * recebia só as próprias parcelas futuras de volta e nunca mais revisitava uma
+ * linha do mês corrente. Terminava com sucesso e não corrigia nada — inclusive
+ * o que uma versão anterior do mapeamento tinha gravado errado.
  *
  * `agora` é injetável porque uma função que lê o relógio por dentro não tem
  * como ser testada na virada do mês.
@@ -219,7 +227,8 @@ export function dataInicialDaBusca(
       .toISOString()
       .slice(0, 10);
   }
-  return new Date(maisRecente.getTime() - JANELA_REVISITA_MS).toISOString().slice(0, 10);
+  const ancora = maisRecente.getTime() > agora.getTime() ? agora : maisRecente;
+  return new Date(ancora.getTime() - JANELA_REVISITA_MS).toISOString().slice(0, 10);
 }
 
 /**

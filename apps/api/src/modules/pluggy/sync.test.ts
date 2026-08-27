@@ -75,6 +75,23 @@ describe("dataInicialDaBusca", () => {
       ).toBe("2026-07-23");
     });
 
+    it("não deixa a janela andar para o futuro por causa de parcela futura", () => {
+      // O Nubank entrega as parcelas que ainda vão vencer como transações de
+      // data futura: a mais recente do cartão é de maio/2027. Medir a janela a
+      // partir dela pedia à Pluggy o extrato "a partir de 13/04/2027", e aí
+      // nenhuma transação de agosto voltava — o sync rodava, dizia que estava
+      // tudo em dia, e nunca mais revisitava uma linha sequer.
+      expect(
+        dataInicialDaBusca(new Date("2027-05-13T00:00:00Z"), new Date("2026-08-27T12:00:00Z"))
+      ).toBe("2026-07-28");
+    });
+
+    it("o teto é hoje, mesmo com a mais recente um dia à frente", () => {
+      expect(
+        dataInicialDaBusca(new Date("2026-08-28T00:00:00Z"), new Date("2026-08-27T12:00:00Z"))
+      ).toBe("2026-07-28");
+    });
+
     it("usa a data UTC, e não a local", () => {
       // A data é gravada em UTC; formatar no fuso da máquina faria a janela
       // andar um dia dependendo de onde o servidor roda.
