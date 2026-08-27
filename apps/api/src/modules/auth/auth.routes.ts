@@ -12,6 +12,7 @@ import {
 } from "./auth.service";
 import { UserNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 import { rateLimit } from "../../middleware/rateLimit";
 
@@ -112,6 +113,7 @@ authRouter.patch(
 authRouter.get(
   "/me",
   requireAuth,
+  withScope,
   asyncHandler(async (req, res) => {
     const user = await getUserById(req.userId!);
     if (!user) {
@@ -124,6 +126,7 @@ authRouter.get(
 authRouter.patch(
   "/me",
   requireAuth,
+  withScope,
   asyncHandler(async (req, res) => {
     const user = await updateProfile(req.userId!, updateProfileSchema.parse(req.body));
     res.json({ user });
@@ -133,6 +136,7 @@ authRouter.patch(
 authRouter.patch(
   "/password",
   requireAuth,
+  withScope,
   asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
     await changePassword(req.userId!, currentPassword, newPassword);

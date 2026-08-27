@@ -11,11 +11,13 @@ import {
 } from "./pluggy.service";
 import { createReviewNotification } from "../notifications/notifications.service";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const pluggyRouter = Router();
 
 pluggyRouter.use(requireAuth);
+pluggyRouter.use(withScope);
 
 const syncItemSchema = z.object({
   pluggyItemId: z.string().optional(),

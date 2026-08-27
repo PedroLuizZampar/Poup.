@@ -3,11 +3,13 @@ import { z } from "zod";
 import { listBudgets, upsertBudget, deleteBudget } from "./budgets.service";
 import { BudgetNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const budgetsRouter = Router();
 
 budgetsRouter.use(requireAuth);
+budgetsRouter.use(withScope);
 
 const upsertBudgetSchema = z.object({
   categoryId: z.string().min(1, "Categoria é obrigatória"),

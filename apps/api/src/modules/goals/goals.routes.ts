@@ -3,11 +3,13 @@ import { z } from "zod";
 import { listGoals, getGoalById, createGoal, updateGoal, deleteGoal } from "./goals.service";
 import { GoalNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const goalsRouter = Router();
 
 goalsRouter.use(requireAuth);
+goalsRouter.use(withScope);
 
 const createGoalSchema = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório"),

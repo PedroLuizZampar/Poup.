@@ -7,11 +7,13 @@ import {
   deleteNotification,
 } from "./notifications.service";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const notificationsRouter = Router();
 
 notificationsRouter.use(requireAuth);
+notificationsRouter.use(withScope);
 
 /**
  * Só lê. A geração de alertas automáticos vive no `POST /check` — abrir o

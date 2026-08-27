@@ -2,11 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { listAccounts, updateAccount } from "./accounts.service";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const accountsRouter = Router();
 
 accountsRouter.use(requireAuth);
+accountsRouter.use(withScope);
 
 const accountTypeSchema = z.enum([
   "CHECKING",

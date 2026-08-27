@@ -9,11 +9,13 @@ import {
 } from "./categories.service";
 import { CategoryNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const categoriesRouter = Router();
 
 categoriesRouter.use(requireAuth);
+categoriesRouter.use(withScope);
 
 const categoryKindSchema = z.enum(["FIXED", "VARIABLE"]);
 

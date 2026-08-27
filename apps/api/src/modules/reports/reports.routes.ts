@@ -2,11 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { getReportSummary } from "./reports.service";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const reportsRouter = Router();
 
 reportsRouter.use(requireAuth);
+reportsRouter.use(withScope);
 
 const summaryQuerySchema = z.object({
   month: z

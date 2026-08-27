@@ -7,11 +7,13 @@ import {
   listPendingSuggestions,
 } from "./suggestions.service";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const suggestionsRouter = Router();
 
 suggestionsRouter.use(requireAuth);
+suggestionsRouter.use(withScope);
 
 const applySchema = z.object({
   categoryId: z.string().min(1),

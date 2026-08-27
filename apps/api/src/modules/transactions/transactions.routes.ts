@@ -19,11 +19,13 @@ import {
 } from "./compensacao.service";
 import { ForbiddenError, TransactionNotFoundError } from "../../lib/errors";
 import { requireAuth } from "../../middleware/requireAuth";
+import { withScope } from "../../middleware/withScope";
 import { asyncHandler } from "../../middleware/errorHandler";
 
 export const transactionsRouter = Router();
 
 transactionsRouter.use(requireAuth);
+transactionsRouter.use(withScope);
 
 const createTransactionSchema = z.object({
   accountId: z.string().min(1, "Conta é obrigatória"),
