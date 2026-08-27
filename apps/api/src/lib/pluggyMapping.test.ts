@@ -451,6 +451,54 @@ describe("ancorasDeCompra", () => {
   });
 });
 
+describe("mesDaFatura quando o conector ja data cada parcela (Nubank)", () => {
+  // O Mercado Pago manda as N parcelas com a data da compra: a linha nao sabe
+  // sozinha em que mes ela cai, e por isso o indice desloca. O Nubank manda
+  // cada parcela com a data do mes dela e a compra em `purchaseDate` — a linha
+  // ja esta posicionada, e deslocar de novo a joga meses para frente. O caso
+  // real: a parcela 11/12 de uma compra de junho/2026, datada 13/04/2027, ia
+  // parar em marco de **2028**.
+  const compra = new Date("2026-06-13T00:00:00Z");
+
+  it("nao desloca a parcela que ja veio datada no mes dela", () => {
+    expect(
+      mesDaFatura(new Date("2027-04-13T00:00:00Z"), "2027-05", 11, false, null, compra)
+    ).toBe("2027-05");
+  });
+
+  it("a ultima parcela de uma 12x fica no mes dela, e nao um ano adiante", () => {
+    expect(
+      mesDaFatura(new Date("2027-05-13T00:00:00Z"), "2027-06", 12, false, null, compra)
+    ).toBe("2027-06");
+  });
+
+  it("a parcela 1 continua igual — nao ha o que deslocar", () => {
+    expect(
+      mesDaFatura(compra, "2026-07", 1, false, null, compra)
+    ).toBe("2026-07");
+  });
+
+  it("sem `purchaseDate`, o comportamento antigo fica de pe", () => {
+    // Conector que nao manda a data da compra nao da como distinguir os dois
+    // mundos. Na duvida, o deslocamento continua: e o que o Mercado Pago exige.
+    expect(mesDaFatura(new Date("2026-08-03T00:00:00Z"), "2026-09", 3, false)).toBe("2026-11");
+  });
+
+  it("parcela na data da compra ainda desloca (o caso do Mercado Pago)", () => {
+    // As dez parcelas chegam juntas, todas com a data da compra: `date` nao
+    // andou, entao o indice e a unica coisa que sabe em que fatura cada uma cai.
+    const mesmoDia = new Date("2026-08-17T00:00:00Z");
+    expect(mesDaFatura(mesmoDia, "2026-09", 3, false, null, mesmoDia)).toBe("2026-11");
+  });
+
+  it("desloca so o que falta quando a data andou menos que o indice", () => {
+    // Parcela 5 cuja data andou dois meses: faltam dois, nao quatro.
+    expect(
+      mesDaFatura(new Date("2026-08-13T00:00:00Z"), "2026-09", 5, false, null, compra)
+    ).toBe("2026-11");
+  });
+});
+
 describe("mesDaFatura com ancora (as parcelas que andavam de dois em dois meses)", () => {
   const emJunho = new Date("2026-06-02T00:00:00Z");
 

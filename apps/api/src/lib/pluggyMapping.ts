@@ -52,6 +52,21 @@ function chaveDeMes(ano: number, mes: number): string {
 }
 
 /**
+ * Quantos meses a data da linha ja andou desde a compra.
+ *
+ * Zero quando nao da para saber — sem `purchaseDate`, ou com uma data anterior
+ * a compra. Zero e o valor conservador: mantem o deslocamento por indice
+ * inteiro, que e o comportamento que o Mercado Pago exige.
+ */
+function mesesAndados(purchaseDate: Date | null | undefined, data: Date): number {
+  if (!purchaseDate || Number.isNaN(purchaseDate.getTime())) return 0;
+  const meses =
+    (data.getUTCFullYear() - purchaseDate.getUTCFullYear()) * 12 +
+    (data.getUTCMonth() - purchaseDate.getUTCMonth());
+  return meses > 0 ? meses : 0;
+}
+
+/**
  * O mes da fatura em que a transacao cai, como "YYYY-MM".
  *
  * Duas fontes, nesta ordem: o `billForecastDate` que a Pluggy manda nos
@@ -89,7 +104,13 @@ export function mesDaFatura(
    * postada permitiu deduzi-lo (ver `ancorasDeCompra`). Fato vence previsao:
    * com ancora, o forecast do conector nao e consultado.
    */
-  ancora?: string | null
+  ancora?: string | null,
+  /**
+   * `creditCardMetadata.purchaseDate` — o dia da compra, igual em todas as
+   * parcelas dela. E o que revela se `data` ja andou sozinha (ver
+   * `mesesAndados`). Ausente, o deslocamento antigo vale inteiro.
+   */
+  purchaseDate?: Date | null
 ): string {
   let ano: number;
   let mes: number; // 1-based
@@ -115,13 +136,20 @@ export function mesDaFatura(
     mes = proximo.getUTCMonth() + 1;
   }
 
-  const deslocamento =
+  const temIndice =
     !jaNaFatura &&
     typeof installmentNumber === "number" &&
     Number.isInteger(installmentNumber) &&
-    installmentNumber >= 1
-      ? installmentNumber - 1
-      : 0;
+    installmentNumber >= 1;
+
+  // O deslocamento cobre so a distancia que a **linha** ainda nao andou. O
+  // Mercado Pago manda as N parcelas com a data da compra: nenhuma andou, e o
+  // indice responde por tudo. O Nubank manda cada parcela datada no mes dela:
+  // ela ja chegou no lugar, e somar o indice a empurra de novo — era como a
+  // parcela 11/12 de uma compra de junho/2026 ia parar em marco de 2028.
+  const deslocamento = temIndice
+    ? Math.max(0, installmentNumber! - 1 - mesesAndados(purchaseDate, data))
+    : 0;
 
   // Deixar o `Date` normalizar o excesso de meses e o que faz a virada de ano
   // sair de graca: mes 18 de 2026 vira junho de 2027.
@@ -260,7 +288,8 @@ export function dadosDeParcela(
     meta.billForecastDate,
     indice,
     pluggyBillId !== null,
-    ancora
+    ancora,
+    meta.purchaseDate ? new Date(meta.purchaseDate) : null
   );
 
   return indice === null
