@@ -3,19 +3,36 @@
 @tailwind utilities;
 
 :root {
-  /* Superfícies — tema claro */
-  --bg:                 #F6FAF7;
-  --bg-rgb:             246 250 247;
-  --surface:            #FFFFFF;
-  --surface-rgb:        255 255 255;
-  --surface-alt:        #EDF3EF;
-  --surface-alt-rgb:    237 243 239;
-  --surface-sunken:     #E7EFEA;
-  --surface-sunken-rgb: 231 239 234;
-  --border:             #E1E8E3;
-  --border-rgb:         225 232 227;
-  --border-strong:      #CBD8D0;
-  --border-strong-rgb:  203 216 208;
+  /* Superfícies — tema claro.
+     O cartão não é branco puro: branco puro é a folha sendo iluminada, e o que
+     se quer é a folha pousada na mesa. Ele cobre a maior parte da tela, e no
+     topo absoluto da escala de luminância é ele quem cansa a vista.
+     O fundo desce junto — se as duas superfícies ficam a um passo uma da
+     outra, o olho não tem onde descansar e a tela inteira vira uma folha só.
+
+     Hex e `-rgb` andam juntos: o Tailwind lê `rgb(var(--surface-rgb) / <a>)`
+     para superfície e borda, então mexer só no hex deixa toda classe
+     `bg-surface` com a cor velha e o erro não aparece no CSS.
+
+     A escala é monotônica de propósito — sunken < bg < alt < surface. Antes
+     `alt` era mais escuro que `bg`, e um botão secundário no fundo da página
+     lia como afundado justamente onde deveria parecer elevado. */
+  --bg:                 #E5EDE9;
+  --bg-rgb:             229 237 233;
+  --surface:            #FAFCFB;
+  --surface-rgb:        250 252 251;
+  --surface-alt:        #EFF5F2;
+  --surface-alt-rgb:    239 245 242;
+  --surface-sunken:     #DBE6E1;
+  --surface-sunken-rgb: 219 230 225;
+  /* A borda acompanha a queda das superfícies e mantém a distância que já
+     tinha do cartão (ΔL* ~8). Ela não precisa engrossar: razão de contraste
+     comprime no topo da escala, e 1,25:1 num fio de 1px não quer dizer
+     invisível. Escurecê-la deixaria a interface encaixotada. */
+  --border:             #DEE7E1;
+  --border-rgb:         222 231 225;
+  --border-strong:      #BFD0C6;
+  --border-strong-rgb:  191 208 198;
 
   /* Texto */
   --text-primary:   #16211C;
