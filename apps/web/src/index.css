@@ -47,12 +47,19 @@
   --text-secondary: #55695F;
   --text-disabled:  #90A398;
 
-  /* Marca e ação */
-  --primary:        #1F7A54;
-  --primary-hover:  #196546;
-  --primary-active: #155C3F;
-  --primary-soft:   #A8E6C3;
-  --primary-ghost:  rgba(31,122,84,.08);
+  /* Marca e ação.
+     O verde escureceu o suficiente para servir de texto sobre o cartão sem
+     deixar de servir de fundo com o branco por cima — os dois papéis que ele
+     acumula. `--primary-soft` deixou de ser um verde-menta chapado e virou véu
+     da própria marca, no mesmo padrão das semânticas: chapado, ele era o bloco
+     mais berrante que sobrou no tema claro.
+     Ghost, anel e cor de foco derivam de `--primary` — trocar o verde sem
+     recalcular os três deixa o anel de foco na cor antiga, e ninguém repara. */
+  --primary:        #247A56;
+  --primary-hover:  #1E6647;
+  --primary-active: #195439;
+  --primary-soft:   rgba(36,122,86,.09);
+  --primary-ghost:  rgba(36,122,86,.08);
   --on-primary:     #FFFFFF;
 
   /* Semânticas */
@@ -95,8 +102,8 @@
   --sh1: 0 1px 2px rgba(0,0,0,.06);
   --sh2: 0 4px 14px rgba(0,0,0,.07);
   --sh3: 0 16px 40px rgba(0,0,0,.10);
-  --ring: 0 0 0 3px rgba(31,122,84,.28);
-  --focus-color:  #1F7A54;
+  --ring: 0 0 0 3px rgba(36,122,86,.28);
+  --focus-color:  #247A56;
   --focus-width:  2px;
   --focus-offset: 2px;
 

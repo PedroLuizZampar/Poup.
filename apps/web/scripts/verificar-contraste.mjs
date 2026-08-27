@@ -172,6 +172,15 @@ function verificar(tema, tokens, { verbose, escada, estruturaBloqueia }) {
     contraste(cor("--on-primary"), sobre(cor("--primary"), card)),
     4.5,
   );
+  checar("--primary sobre --surface", contraste(cor("--primary"), card), 4.5);
+  // O véu da marca leva `text-primary` por cima em UserAvatar, UpdateBanner e
+  // no cartão de credenciais do perfil — então ele é par de leitura, não só
+  // decoração.
+  checar(
+    "--primary sobre --primary-soft",
+    contraste(cor("--primary"), sobre(cor("--primary-soft"), card)),
+    4.5,
+  );
 
   console.log(" semânticas");
   for (const nome of SEMANTICAS) {
