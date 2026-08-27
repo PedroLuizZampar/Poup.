@@ -101,6 +101,14 @@ model Household {
 /// O e-mail e guardado ao lado do `inviteeId` para que o registro continue
 /// legivel depois: quem convidou precisa ver para quem mandou, e nome e e-mail
 /// do outro podem mudar.
+///
+/// O indice unico parcial `HouseholdInvite_pendente_por_par` (um convite
+/// pendente por par householdId+inviteeId) vive so na migracao
+/// `20260827194103_conta_conjunta/migration.sql` — PSL nao tem sintaxe para
+/// indice parcial (`WHERE`), entao ele nao pode ser declarado aqui. Qualquer
+/// migracao futura gerada por `prisma migrate dev` precisa preservar esse
+/// indice manualmente, ou a guarda de concorrencia contra convite duplicado
+/// some silenciosamente.
 model HouseholdInvite {
   id           String                @id @default(uuid())
   householdId  String
@@ -145,6 +153,8 @@ model User {
   household           Household            @relation(fields: [householdId], references: [id])
   invitesSent         HouseholdInvite[]    @relation("InvitesSent")
   invitesReceived     HouseholdInvite[]    @relation("InvitesReceived")
+
+  @@index([householdId])
 }
 
 model Item {
