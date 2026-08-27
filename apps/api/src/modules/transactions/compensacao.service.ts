@@ -7,6 +7,7 @@ import type {
 import { prisma } from "../../prisma";
 import { candidatasDeCompensacao, type GrupoDeCompra } from "../../lib/compensacao";
 import { TransactionNotFoundError, UnprocessableError } from "../../lib/errors";
+import type { Scope } from "../../lib/scope";
 
 /**
  * Compensar um estorno: dizer que aquele crédito cancela aquela compra
@@ -22,10 +23,10 @@ function centavos(valor: { toString(): string }): number {
   return Math.round(Number(valor.toString()) * 100);
 }
 
-/** A ponta crédito, conferida. O par (id, userId) é o que prova posse. */
-async function creditoDoUsuario(userId: string, transactionId: string) {
+/** A ponta crédito, conferida. O par (id, membros do espaço) é o que prova posse. */
+async function creditoDoEspaco(scope: Scope, transactionId: string) {
   const tx = await prisma.transaction.findFirst({
-    where: { id: transactionId, userId },
+    where: { id: transactionId, userId: { in: scope.memberIds } },
     select: {
       id: true,
       accountId: true,
@@ -53,10 +54,10 @@ async function creditoDoUsuario(userId: string, transactionId: string) {
 }
 
 /** As compras parceladas da conta, reunidas por `purchaseKey`. */
-async function gruposDaConta(userId: string, accountId: string): Promise<GrupoDeCompra[]> {
+async function gruposDaConta(scope: Scope, accountId: string): Promise<GrupoDeCompra[]> {
   const linhas = await prisma.transaction.findMany({
     where: {
-      userId,
+      userId: { in: scope.memberIds },
       accountId,
       type: "EXPENSE",
       purchaseKey: { not: null },
@@ -104,11 +105,11 @@ async function gruposDaConta(userId: string, accountId: string): Promise<GrupoDe
 }
 
 export async function listarCandidatas(
-  userId: string,
+  scope: Scope,
   transactionId: string
 ): Promise<CompensationCandidatesResponse> {
-  const credito = await creditoDoUsuario(userId, transactionId);
-  const grupos = await gruposDaConta(userId, credito.accountId);
+  const credito = await creditoDoEspaco(scope, transactionId);
+  const grupos = await gruposDaConta(scope, credito.accountId);
 
   const candidatas = candidatasDeCompensacao(
     {
@@ -136,14 +137,14 @@ export async function listarCandidatas(
 }
 
 export async function compensar(
-  userId: string,
+  scope: Scope,
   transactionId: string,
   purchaseKey: string
 ): Promise<{ compensationId: string; afetadas: number }> {
-  const credito = await creditoDoUsuario(userId, transactionId);
+  const credito = await creditoDoEspaco(scope, transactionId);
 
   const parcelas = await prisma.transaction.findMany({
-    where: { userId, purchaseKey },
+    where: { userId: { in: scope.memberIds }, purchaseKey },
     select: {
       id: true,
       accountId: true,
@@ -185,7 +186,7 @@ export async function compensar(
   // Uma escrita só, e não uma por linha: um erro no meio deixaria metade da
   // compra compensada — pior que não ter compensado nada.
   const { count } = await prisma.transaction.updateMany({
-    where: { userId, id: { in: ids } },
+    where: { userId: { in: scope.memberIds }, id: { in: ids } },
     data: { compensationId },
   });
 
@@ -193,11 +194,11 @@ export async function compensar(
 }
 
 export async function desfazerCompensacao(
-  userId: string,
+  scope: Scope,
   transactionId: string
 ): Promise<{ afetadas: number }> {
   const tx = await prisma.transaction.findFirst({
-    where: { id: transactionId, userId },
+    where: { id: transactionId, userId: { in: scope.memberIds } },
     select: { compensationId: true },
   });
 
@@ -208,7 +209,7 @@ export async function desfazerCompensacao(
   if (tx.compensationId === null) return { afetadas: 0 };
 
   const { count } = await prisma.transaction.updateMany({
-    where: { userId, compensationId: tx.compensationId },
+    where: { userId: { in: scope.memberIds }, compensationId: tx.compensationId },
     data: { compensationId: null },
   });
 
@@ -226,11 +227,11 @@ export async function desfazerCompensacao(
  * por uma parcela devolve o mesmo que perguntar pelo credito.
  */
 export async function detalheDaCompensacao(
-  userId: string,
+  scope: Scope,
   transactionId: string
 ): Promise<CompensationDetailResponse> {
   const tx = await prisma.transaction.findFirst({
-    where: { id: transactionId, userId },
+    where: { id: transactionId, userId: { in: scope.memberIds } },
     select: { compensationId: true },
   });
 
@@ -238,7 +239,7 @@ export async function detalheDaCompensacao(
   if (tx.compensationId === null) return { compensation: null };
 
   const linhas = await prisma.transaction.findMany({
-    where: { userId, compensationId: tx.compensationId },
+    where: { userId: { in: scope.memberIds }, compensationId: tx.compensationId },
     select: {
       id: true,
       description: true,

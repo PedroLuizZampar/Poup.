@@ -1,6 +1,7 @@
 import { CategoryKind, Prisma, SystemCategoryKey } from "@prisma/client";
 import { prisma } from "../../prisma";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import { ownerIds, type Scope } from "../../lib/scope";
 import type {
   ReportCategoryTotalDTO,
   ReportKindTotalDTO,
@@ -107,11 +108,11 @@ function toCents(value: Prisma.Decimal | number | null | undefined): number {
  * São duas categorias distintas porque a pessoa precisa distinguir uma da outra
  * na lista — mas, para todo total, valem a mesma coisa: ficam de fora.
  */
-async function totalsByType(userId: string, period: ResolvedPeriod, ocultas: string[]) {
+async function totalsByType(donos: string[], period: ResolvedPeriod, ocultas: string[]) {
   const grouped = await prisma.transaction.groupBy({
     by: ["type"],
     where: {
-      userId,
+      userId: { in: donos },
       NOT: { categoryId: { in: ocultas } },
       // Compra compensada por um estorno nao foi gasta, e o credito que a
       // cancelou nao foi ganho: as duas pontas saem dos totais.
@@ -141,8 +142,12 @@ async function totalsByType(userId: string, period: ResolvedPeriod, ocultas: str
   return { income, expense, transactionCount, expenseCount };
 }
 
+// `donos` e `householdId` sao eixos diferentes de proposito: a despesa e de
+// quem gastou, a categoria e do espaco inteiro. Recebe-los separados impede que
+// alguem, mais tarde, filtre a categoria pelas pessoas do seletor.
 async function expensesByCategory(
-  userId: string,
+  householdId: string,
+  donos: string[],
   period: ResolvedPeriod,
   totalExpense: number,
   ocultas: string[]
@@ -150,7 +155,7 @@ async function expensesByCategory(
   const grouped = await prisma.transaction.groupBy({
     by: ["categoryId"],
     where: {
-      userId,
+      userId: { in: donos },
       type: "EXPENSE",
       NOT: { categoryId: { in: ocultas } },
       compensationId: null,
@@ -167,7 +172,7 @@ async function expensesByCategory(
     .filter((id): id is string => id !== null);
 
   const categories = await prisma.category.findMany({
-    where: { id: { in: categoryIds }, userId },
+    where: { id: { in: categoryIds }, householdId },
     select: { id: true, name: true, icon: true, colorKey: true, kind: true },
   });
   const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -236,7 +241,7 @@ interface MonthlyRow {
  * três de uma vez.
  */
 async function monthlySeries(
-  userId: string,
+  donos: string[],
   months: string[],
   ocultas: string[]
 ): Promise<ReportMonthTotalDTO[]> {
@@ -252,7 +257,7 @@ async function monthlySeries(
            "type"::text AS type,
            SUM("amount") AS total
     FROM "Transaction"
-    WHERE "userId" = ${userId}
+    WHERE "userId" IN (${Prisma.join(donos)})
       AND "competenceDate" >= ${start}
       AND "competenceDate" < ${end}
       AND ("categoryId" IS NULL OR "categoryId" NOT IN (${Prisma.join(ocultas)}))
@@ -295,14 +300,23 @@ export interface ReportSummaryOptions {
   period?: ReportPeriod;
   /** Tamanho da série mensal. Sem isto, a série cobre o próprio período. */
   history?: number;
+  /**
+   * O seletor "Todos / Fulano / Beltrano" da tela. Ausente é o espaço inteiro —
+   * quem valida se o id pertence ao espaço é o `ownerIds`, nunca este arquivo.
+   */
+  owner?: string;
 }
 
 export async function getReportSummary(
-  userId: string,
+  scope: Scope,
   options: ReportSummaryOptions = {}
 ): Promise<ReportSummaryDTO> {
   const period = resolvePeriod(options);
-  const systemIds = await ensureSystemCategories(prisma, userId);
+  // Resolvido uma vez e passado adiante: as quatro consultas do resumo têm de
+  // somar exatamente o mesmo conjunto de pessoas, ou os totais não fecham entre
+  // si.
+  const donos = ownerIds(scope, options.owner);
+  const systemIds = await ensureSystemCategories(prisma, scope.householdId);
   // As duas ocultas que não somam em lugar nenhum. "Sem categoria" fica de
   // fora desta lista de propósito: aquilo é despesa de verdade esperando um
   // nome, e some do total no dia em que sumir do relatório também.
@@ -312,11 +326,11 @@ export async function getReportSummary(
   ];
 
   const [totals, uncategorizedCount] = await Promise.all([
-    totalsByType(userId, period, ocultas),
+    totalsByType(donos, period, ocultas),
     // "Sem categoria" deixou de ser ausência e virou lugar: a oculta.
     prisma.transaction.count({
       where: {
-        userId,
+        userId: { in: donos },
         categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED],
         ...dateFilter(period),
       },
@@ -324,8 +338,8 @@ export async function getReportSummary(
   ]);
 
   const [byCategory, monthly] = await Promise.all([
-    expensesByCategory(userId, period, totals.expense, ocultas),
-    monthlySeries(userId, resolveSeriesMonths(period, options.history), ocultas),
+    expensesByCategory(scope.householdId, donos, period, totals.expense, ocultas),
+    monthlySeries(donos, resolveSeriesMonths(period, options.history), ocultas),
   ]);
 
   const balance = Number((totals.income - totals.expense).toFixed(2));

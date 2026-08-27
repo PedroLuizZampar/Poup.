@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { Scope } from "../../lib/scope";
 
 /**
  * O que vale travar aqui é a decisão, não o Postgres: quem pode compensar o
@@ -18,6 +19,12 @@ vi.mock("../../prisma", () => ({
 const { compensar, desfazerCompensacao, detalheDaCompensacao } = await import(
   "./compensacao.service"
 );
+
+/**
+ * Um espaco de um membro so: a compensacao nao tem seletor de pessoa, entao o
+ * que muda com a conta conjunta e a forma do filtro (`in`), nao a regra.
+ */
+const escopo: Scope = { userId: "user-1", householdId: "casa-1", memberIds: ["user-1"] };
 
 const credito = {
   id: "tx-estorno",
@@ -51,7 +58,7 @@ describe("compensar", () => {
     findMany.mockResolvedValue(oitoParcelas);
     updateMany.mockResolvedValue({ count: 9 });
 
-    const resultado = await compensar("user-1", "tx-estorno", "chave-a");
+    const resultado = await compensar(escopo, "tx-estorno", "chave-a");
 
     expect(resultado.afetadas).toBe(9);
     expect(updateMany).toHaveBeenCalledTimes(1);
@@ -61,7 +68,7 @@ describe("compensar", () => {
     // metade da compra compensada, que é pior que nenhuma.
     expect(args.where.id.in).toHaveLength(9);
     expect(args.where.id.in).toContain("tx-estorno");
-    expect(args.where.userId).toBe("user-1");
+    expect(args.where.userId).toEqual({ in: ["user-1"] });
     expect(typeof args.data.compensationId).toBe("string");
   });
 
@@ -69,7 +76,7 @@ describe("compensar", () => {
     findFirst.mockResolvedValue(credito);
     findMany.mockResolvedValue(oitoParcelas.slice(0, 7));
 
-    await expect(compensar("user-1", "tx-estorno", "chave-a")).rejects.toThrow(/valor/i);
+    await expect(compensar(escopo, "tx-estorno", "chave-a")).rejects.toThrow(/valor/i);
     expect(updateMany).not.toHaveBeenCalled();
   });
 
@@ -80,21 +87,21 @@ describe("compensar", () => {
       { ...parcela(1), amount: { toString: () => "272" }, installmentTotal: null },
     ]);
 
-    await expect(compensar("user-1", "tx-estorno", "chave-a")).rejects.toThrow(/parcel/i);
+    await expect(compensar(escopo, "tx-estorno", "chave-a")).rejects.toThrow(/parcel/i);
     expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("recusa um crédito que já está compensado", async () => {
     findFirst.mockResolvedValue({ ...credito, compensationId: "par-antigo" });
 
-    await expect(compensar("user-1", "tx-estorno", "chave-a")).rejects.toThrow(/compensad/i);
+    await expect(compensar(escopo, "tx-estorno", "chave-a")).rejects.toThrow(/compensad/i);
     expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("recusa quando a ponta escolhida é uma despesa", async () => {
     findFirst.mockResolvedValue({ ...credito, type: "EXPENSE" });
 
-    await expect(compensar("user-1", "tx-estorno", "chave-a")).rejects.toThrow();
+    await expect(compensar(escopo, "tx-estorno", "chave-a")).rejects.toThrow();
     expect(updateMany).not.toHaveBeenCalled();
   });
 
@@ -102,16 +109,16 @@ describe("compensar", () => {
     findFirst.mockResolvedValue(credito);
     findMany.mockResolvedValue(oitoParcelas.map((p) => ({ ...p, accountId: "cartao-2" })));
 
-    await expect(compensar("user-1", "tx-estorno", "chave-a")).rejects.toThrow(/conta/i);
+    await expect(compensar(escopo, "tx-estorno", "chave-a")).rejects.toThrow(/conta/i);
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it("transação de outro usuário não existe", async () => {
-    // O par (id, userId) é o que prova posse. Não achou = 404, e não 403: não
-    // se confirma a existência de linha alheia.
+  it("transação de fora do espaço não existe", async () => {
+    // O par (id, membros do espaço) é o que prova posse. Não achou = 404, e
+    // não 403: não se confirma a existência de linha de fora do espaço.
     findFirst.mockResolvedValue(null);
 
-    await expect(compensar("user-1", "tx-de-outro", "chave-a")).rejects.toThrow();
+    await expect(compensar(escopo, "tx-de-outro", "chave-a")).rejects.toThrow();
     expect(updateMany).not.toHaveBeenCalled();
   });
 });
@@ -121,18 +128,18 @@ describe("desfazerCompensacao", () => {
     findFirst.mockResolvedValue({ ...credito, compensationId: "par-1" });
     updateMany.mockResolvedValue({ count: 9 });
 
-    const resultado = await desfazerCompensacao("user-1", "p3");
+    const resultado = await desfazerCompensacao(escopo, "p3");
 
     expect(resultado.afetadas).toBe(9);
     const args = updateMany.mock.calls[0][0];
-    expect(args.where).toEqual({ userId: "user-1", compensationId: "par-1" });
+    expect(args.where).toEqual({ userId: { in: ["user-1"] }, compensationId: "par-1" });
     expect(args.data).toEqual({ compensationId: null });
   });
 
   it("desfazer o que não está compensado não escreve nada", async () => {
     findFirst.mockResolvedValue({ ...credito, compensationId: null });
 
-    const resultado = await desfazerCompensacao("user-1", "tx-estorno");
+    const resultado = await desfazerCompensacao(escopo, "tx-estorno");
 
     expect(resultado.afetadas).toBe(0);
     expect(updateMany).not.toHaveBeenCalled();
@@ -168,7 +175,7 @@ describe("detalheDaCompensacao", () => {
     findFirst.mockResolvedValue({ compensationId: "par-1" });
     findMany.mockResolvedValue([doGrupo.estorno, ...doGrupo.parcelas]);
 
-    const { compensation } = await detalheDaCompensacao("user-1", "tx-estorno");
+    const { compensation } = await detalheDaCompensacao(escopo, "tx-estorno");
 
     expect(compensation).not.toBeNull();
     expect(compensation!.estorno).toMatchObject({ id: "tx-estorno", amount: 272 });
@@ -188,10 +195,10 @@ describe("detalheDaCompensacao", () => {
     findFirst.mockResolvedValue({ compensationId: "par-1" });
     findMany.mockResolvedValue([doGrupo.estorno, ...doGrupo.parcelas]);
 
-    await detalheDaCompensacao("user-1", "p3");
+    await detalheDaCompensacao(escopo, "p3");
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      userId: "user-1",
+      userId: { in: ["user-1"] },
       compensationId: "par-1",
     });
   });
@@ -199,15 +206,15 @@ describe("detalheDaCompensacao", () => {
   it("transação não compensada não tem detalhe nenhum", async () => {
     findFirst.mockResolvedValue({ compensationId: null });
 
-    expect(await detalheDaCompensacao("user-1", "tx-estorno")).toEqual({
+    expect(await detalheDaCompensacao(escopo, "tx-estorno")).toEqual({
       compensation: null,
     });
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it("transação de outro usuário não existe", async () => {
+  it("transação de fora do espaço não existe", async () => {
     findFirst.mockResolvedValue(null);
 
-    await expect(detalheDaCompensacao("user-1", "tx-de-outro")).rejects.toThrow();
+    await expect(detalheDaCompensacao(escopo, "tx-de-outro")).rejects.toThrow();
   });
 });

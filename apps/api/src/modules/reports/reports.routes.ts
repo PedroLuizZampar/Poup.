@@ -17,13 +17,16 @@ const summaryQuerySchema = z.object({
     .optional(),
   period: z.enum(["current", "3m", "6m", "year", "all"]).optional(),
   history: z.coerce.number().int().min(1).max(24).optional(),
+  // O seletor de pessoa da tela. Quem valida se o id pertence ao espaco e o
+  // `ownerIds`, la na service.
+  owner: z.string().optional(),
 });
 
 reportsRouter.get(
   "/summary",
   asyncHandler(async (req, res) => {
     const query = summaryQuerySchema.parse(req.query);
-    const summary = await getReportSummary(req.userId!, query);
+    const summary = await getReportSummary(req.scope!, query);
     res.json({ summary });
   })
 );

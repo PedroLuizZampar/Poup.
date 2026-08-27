@@ -346,6 +346,8 @@ export interface TransactionFilterQuery {
   maxAmount?: number;
   /** Teto de resultados. O painel usa 5 — ele so mostra as ultimas. */
   limit?: number;
+  /** Membro do espaco a filtrar. Ausente (ou "all") soma o espaco inteiro. */
+  owner?: string;
 }
 
 export interface ItemDTO {
@@ -409,6 +411,8 @@ export interface ReportQuery {
   period?: ReportPeriod;
   /** Quantos meses a serie mensal deve cobrir, terminando no mes do periodo. */
   history?: number;
+  /** Membro do espaco a filtrar. Ausente (ou "all") soma o espaco inteiro. */
+  owner?: string;
 }
 
 export interface ReportCategoryTotalDTO {

@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma";
 import type { AccountDTO, AccountType } from "@poup/shared";
 import { AccountNotFoundError, UnprocessableError } from "../../lib/errors";
+import type { Scope } from "../../lib/scope";
 
 export { AccountNotFoundError };
 
@@ -25,9 +26,11 @@ export function resolveAccountType(account: {
   return account.customType ?? account.type;
 }
 
-export async function listAccounts(userId: string): Promise<AccountDTO[]> {
+export async function listAccounts(scope: Scope): Promise<AccountDTO[]> {
   const accounts = await prisma.account.findMany({
-    where: { userId },
+    // Sem seletor de pessoa nesta tela: as contas do espaco vem todas, ou o
+    // saldo somado contaria so metade do dinheiro da casa.
+    where: { userId: { in: scope.memberIds } },
     include: { item: true },
     orderBy: [{ institutionName: "asc" }, { name: "asc" }],
   });
@@ -67,11 +70,15 @@ export interface UpdateAccountInput {
 
 /** Os campos que o usuário edita numa conta. Ausente é "não mexa". */
 export async function updateAccount(
-  userId: string,
+  scope: Scope,
   id: string,
   input: UpdateAccountInput
 ): Promise<AccountDTO> {
-  const existing = await prisma.account.findFirst({ where: { id, userId } });
+  // Qualquer membro renomeia qualquer conta do espaco: o apelido descreve a
+  // conta para os dois, nao so para quem a conectou.
+  const existing = await prisma.account.findFirst({
+    where: { id, userId: { in: scope.memberIds } },
+  });
   if (!existing) {
     throw new AccountNotFoundError();
   }
@@ -109,6 +116,6 @@ export async function updateAccount(
     },
   });
 
-  const accounts = await listAccounts(userId);
+  const accounts = await listAccounts(scope);
   return accounts.find((a) => a.id === id)!;
 }

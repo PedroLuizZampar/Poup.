@@ -2,6 +2,7 @@ import type { Account as PluggyAccount, Transaction as PluggyTransaction } from 
 import { getPluggyClientForUser } from "../../lib/pluggy";
 import { prisma } from "../../prisma";
 import { reconhecerPagamentos, sincronizarFaturas } from "../bills/bills.service";
+import { resolveScope } from "../../lib/scope";
 import { ItemStatus, AccountType, TransactionType, Prisma, type Item } from "@prisma/client";
 import type { ItemDTO, SyncItemResponse } from "@poup/shared";
 import { validateImageDataUrl } from "../../lib/imageDataUrl";
@@ -617,7 +618,7 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
 
   // Depois de tudo importado: as duas pontas de um pagamento moram em contas
   // diferentes e podem ter chegado em sincronizações diferentes.
-  await reconhecerPagamentos(userId).catch((err: any) => {
+  await reconhecerPagamentos(await resolveScope(userId)).catch((err: any) => {
     // Reconhecimento é melhoria, não requisito: falhar aqui não pode desfazer
     // um sync que já gravou tudo.
     console.warn(`Erro ao reconhecer pagamentos de fatura:`, err?.message || err);
@@ -804,7 +805,7 @@ export async function backfillAccount(
 
   const review = await processNewTransactions(userId, importadas.criadas);
 
-  await reconhecerPagamentos(userId).catch((err: any) => {
+  await reconhecerPagamentos(await resolveScope(userId)).catch((err: any) => {
     // Reconhecimento é melhoria, não requisito: falhar aqui não pode desfazer
     // um histórico que já foi gravado.
     console.warn(`Erro ao reconhecer pagamentos de fatura:`, err?.message || err);

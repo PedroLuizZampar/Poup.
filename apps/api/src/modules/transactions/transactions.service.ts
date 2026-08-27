@@ -16,6 +16,7 @@ import {
   TransactionNotFoundError,
 } from "../../lib/errors";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import { ownerIds, type Scope } from "../../lib/scope";
 import { vencimentoDaFatura } from "../../lib/pluggyMapping";
 import { statusDaParcela } from "../../lib/statusDaParcela";
 import { buscarEmLotes } from "../../lib/lotes";
@@ -38,6 +39,11 @@ export interface TransactionFilters {
   maxAmount?: number;
   /** Teto de resultados, para quem só mostra as últimas (o painel usa 5). */
   limit?: number;
+  /**
+   * O seletor "Todos / Fulano / Beltrano" da tela. Ausente é todo o espaço —
+   * quem valida se o id pertence ao espaço é o `ownerIds`, nunca este arquivo.
+   */
+  owner?: string;
 }
 
 export interface CreateTransactionInput {
@@ -119,11 +125,13 @@ function nextDayUtc(day: string): Date {
 }
 
 export async function listTransactions(
-  userId: string,
+  scope: Scope,
   filters: TransactionFilters = {}
 ): Promise<TransactionDTO[]> {
   const where: Prisma.TransactionWhereInput = {
-    userId,
+    // A lista é do espaço: sem o `in`, o casal veria metade do próprio mês sem
+    // nenhum erro para denunciar a falta.
+    userId: { in: ownerIds(scope, filters.owner) },
   };
 
   if (filters.month) {
@@ -158,7 +166,7 @@ export async function listTransactions(
 
   if (filters.uncategorized) {
     // "Sem categoria" deixou de ser ausência e virou um lugar: a oculta.
-    const systemIds = await ensureSystemCategories(prisma, userId);
+    const systemIds = await ensureSystemCategories(prisma, scope.householdId);
     where.categoryId = systemIds[SystemCategoryKey.UNCATEGORIZED];
   } else if (filters.categoryId) {
     where.categoryId = filters.categoryId;
@@ -202,11 +210,11 @@ export async function listTransactions(
 }
 
 export async function getTransactionById(
-  userId: string,
+  scope: Scope,
   id: string
 ): Promise<TransactionDTO | null> {
   const tx = await prisma.transaction.findFirst({
-    where: { id, userId },
+    where: { id, userId: { in: scope.memberIds } },
     include: TX_INCLUDE,
   });
 
@@ -215,11 +223,11 @@ export async function getTransactionById(
 }
 
 export async function createTransaction(
-  userId: string,
+  scope: Scope,
   input: CreateTransactionInput
 ): Promise<TransactionDTO> {
   const account = await prisma.account.findFirst({
-    where: { id: input.accountId, userId },
+    where: { id: input.accountId, userId: { in: scope.memberIds } },
   });
   if (!account) {
     throw new AccountNotFoundError();
@@ -227,7 +235,7 @@ export async function createTransaction(
 
   if (input.categoryId) {
     const category = await prisma.category.findFirst({
-      where: { id: input.categoryId, userId },
+      where: { id: input.categoryId, householdId: scope.householdId },
     });
     if (!category) {
       throw new CategoryNotFoundError();
@@ -239,13 +247,15 @@ export async function createTransaction(
   let categoryId = input.categoryId ?? null;
   const semCategoria = !categoryId;
   if (!categoryId) {
-    const systemIds = await ensureSystemCategories(prisma, userId);
+    const systemIds = await ensureSystemCategories(prisma, scope.householdId);
     categoryId = systemIds[SystemCategoryKey.UNCATEGORIZED];
   }
 
   const created = await prisma.transaction.create({
     data: {
-      userId,
+      // Quem lança é o dono da linha, mesmo lançando na conta do parceiro: é o
+      // que faz a dissolução do espaço saber com quem cada transação fica.
+      userId: scope.userId,
       accountId: input.accountId,
       description: input.description.trim(),
       amount: new Prisma.Decimal(input.amount),
@@ -264,19 +274,19 @@ export async function createTransaction(
   // Lançamento manual sem categoria é uma decisão adiada como qualquer outra: a
   // fila de revisão é onde ela espera.
   if (semCategoria) {
-    await reopenPendingSuggestion(userId, created.id);
+    await reopenPendingSuggestion(scope.userId, created.id);
   }
 
   return formatTransactionDTO(created);
 }
 
 export async function updateTransaction(
-  userId: string,
+  scope: Scope,
   id: string,
   input: UpdateTransactionInput
 ): Promise<TransactionDTO> {
   const existing = await prisma.transaction.findFirst({
-    where: { id, userId },
+    where: { id, userId: { in: scope.memberIds } },
   });
   if (!existing) {
     throw new TransactionNotFoundError();
@@ -284,7 +294,7 @@ export async function updateTransaction(
 
   if (input.categoryId !== undefined && input.categoryId !== null) {
     const category = await prisma.category.findFirst({
-      where: { id: input.categoryId, userId },
+      where: { id: input.categoryId, householdId: scope.householdId },
     });
     if (!category) {
       throw new CategoryNotFoundError();
@@ -296,9 +306,15 @@ export async function updateTransaction(
   // categoria que já não descreve nada — ela volta para "Sem categoria", onde o
   // filtro e a fila de revisão a encontram.
   if (input.categoryId !== undefined && existing.transferPairId) {
-    const systemIds = await ensureSystemCategories(prisma, userId);
+    const systemIds = await ensureSystemCategories(prisma, scope.householdId);
+    // A outra ponta pode ser do parceiro — o pagamento de fatura pareia a conta
+    // corrente de um com o cartão do outro.
     const orfas = await prisma.transaction.findMany({
-      where: { userId, transferPairId: existing.transferPairId, id: { not: id } },
+      where: {
+        userId: { in: scope.memberIds },
+        transferPairId: existing.transferPairId,
+        id: { not: id },
+      },
       select: { id: true },
     });
 
@@ -310,7 +326,7 @@ export async function updateTransaction(
           categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED],
         },
       });
-      await reopenPendingSuggestion(userId, orfa.id);
+      await reopenPendingSuggestion(scope.userId, orfa.id);
     }
 
     await prisma.transaction.update({
@@ -326,7 +342,7 @@ export async function updateTransaction(
   let nextCategoryId = input.categoryId;
   let voltouParaAFila = false;
   if (input.categoryId === null) {
-    const systemIds = await ensureSystemCategories(prisma, userId);
+    const systemIds = await ensureSystemCategories(prisma, scope.householdId);
     nextCategoryId = systemIds[SystemCategoryKey.UNCATEGORIZED];
     voltouParaAFila = true;
   }
@@ -343,7 +359,7 @@ export async function updateTransaction(
   });
 
   if (voltouParaAFila) {
-    await reopenPendingSuggestion(userId, id);
+    await reopenPendingSuggestion(scope.userId, id);
   }
 
   return formatTransactionDTO(updated);
@@ -357,14 +373,14 @@ export async function updateTransaction(
  * multiplicar a resposta por dez para alimentar um dropdown que quase nunca e
  * aberto.
  *
- * O par (id, userId) e o que prova posse — id sozinho nao prova nada.
+ * O par (id, membros do espaco) e o que prova posse — id sozinho nao prova nada.
  */
 export async function listInstallments(
-  userId: string,
+  scope: Scope,
   transactionId: string
 ): Promise<InstallmentsResponse> {
   const base = await prisma.transaction.findFirst({
-    where: { id: transactionId, userId },
+    where: { id: transactionId, userId: { in: scope.memberIds } },
     select: { purchaseKey: true },
   });
 
@@ -379,7 +395,7 @@ export async function listInstallments(
   }
 
   const rows = await prisma.transaction.findMany({
-    where: { userId, purchaseKey: base.purchaseKey },
+    where: { userId: { in: scope.memberIds }, purchaseKey: base.purchaseKey },
     include: TX_INCLUDE,
     orderBy: [{ installmentIndex: "asc" }, { competenceDate: "asc" }],
   });
@@ -393,7 +409,7 @@ export async function listInstallments(
 
   const faturas = await buscarEmLotes(idsDeFatura, (lote) =>
     prisma.creditCardBill.findMany({
-      where: { userId, pluggyBillId: { in: lote } },
+      where: { userId: { in: scope.memberIds }, pluggyBillId: { in: lote } },
       select: { pluggyBillId: true, dueDate: true, paidAt: true },
     })
   );

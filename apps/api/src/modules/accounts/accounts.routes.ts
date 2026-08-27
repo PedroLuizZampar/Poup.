@@ -36,7 +36,7 @@ const updateAccountSchema = z.object({
 accountsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const accounts = await listAccounts(req.userId!);
+    const accounts = await listAccounts(req.scope!);
     res.json({ accounts });
   })
 );
@@ -45,7 +45,7 @@ accountsRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     const input = updateAccountSchema.parse(req.body);
-    const account = await updateAccount(req.userId!, req.params.id, input);
+    const account = await updateAccount(req.scope!, req.params.id, input);
     res.json({ account });
   })
 );

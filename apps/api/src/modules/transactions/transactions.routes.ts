@@ -63,13 +63,16 @@ const queryFilterSchema = z.object({
   minAmount: z.coerce.number().min(0).optional(),
   maxAmount: z.coerce.number().min(0).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
+  // O seletor de pessoa da tela. Quem valida se o id pertence ao espaco e o
+  // `ownerIds`, la na service — aqui e so mais um filtro de query.
+  owner: z.string().optional(),
 });
 
 transactionsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const filters = queryFilterSchema.parse(req.query);
-    const transactions = await listTransactions(req.userId!, filters);
+    const transactions = await listTransactions(req.scope!, filters);
     res.json({ transactions });
   })
 );
@@ -106,7 +109,7 @@ transactionsRouter.get(
 transactionsRouter.get(
   "/:id/installments",
   asyncHandler(async (req, res) => {
-    const result = await listInstallments(req.userId!, req.params.id);
+    const result = await listInstallments(req.scope!, req.params.id);
     res.json(result);
   })
 );
@@ -122,14 +125,14 @@ transactionsRouter.get(
 transactionsRouter.get(
   "/:id/compensation/candidates",
   asyncHandler(async (req, res) => {
-    res.json(await listarCandidatas(req.userId!, req.params.id));
+    res.json(await listarCandidatas(req.scope!, req.params.id));
   })
 );
 
 transactionsRouter.get(
   "/:id/compensation",
   asyncHandler(async (req, res) => {
-    res.json(await detalheDaCompensacao(req.userId!, req.params.id));
+    res.json(await detalheDaCompensacao(req.scope!, req.params.id));
   })
 );
 
@@ -137,21 +140,21 @@ transactionsRouter.post(
   "/:id/compensation",
   asyncHandler(async (req, res) => {
     const { purchaseKey } = compensateSchema.parse(req.body);
-    res.json(await compensar(req.userId!, req.params.id, purchaseKey));
+    res.json(await compensar(req.scope!, req.params.id, purchaseKey));
   })
 );
 
 transactionsRouter.delete(
   "/:id/compensation",
   asyncHandler(async (req, res) => {
-    res.json(await desfazerCompensacao(req.userId!, req.params.id));
+    res.json(await desfazerCompensacao(req.scope!, req.params.id));
   })
 );
 
 transactionsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const transaction = await getTransactionById(req.userId!, req.params.id);
+    const transaction = await getTransactionById(req.scope!, req.params.id);
     if (!transaction) {
       throw new TransactionNotFoundError();
     }
@@ -163,7 +166,7 @@ transactionsRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const transaction = await createTransaction(
-      req.userId!,
+      req.scope!,
       createTransactionSchema.parse(req.body)
     );
     res.status(201).json({ transaction });
@@ -172,7 +175,7 @@ transactionsRouter.post(
 
 const updateHandler = asyncHandler(async (req, res) => {
   const transaction = await updateTransaction(
-    req.userId!,
+    req.scope!,
     req.params.id,
     updateTransactionSchema.parse(req.body)
   );

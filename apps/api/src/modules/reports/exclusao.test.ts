@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { Scope } from "../../lib/scope";
 
 /**
  * As três consultas que somam dinheiro no relatório precisam ignorar linha
@@ -22,6 +23,9 @@ vi.mock("../../prisma", () => ({
 
 const { getReportSummary } = await import("./reports.service");
 
+/** Um espaco de um membro so: o que muda aqui e a forma do filtro, nao a regra. */
+const escopo: Scope = { userId: "user-1", householdId: "casa-1", memberIds: ["user-1"] };
+
 beforeEach(() => {
   groupBy.mockReset().mockResolvedValue([]);
   count.mockReset().mockResolvedValue(0);
@@ -33,16 +37,19 @@ beforeEach(() => {
 
 describe("relatório ignora linha compensada", () => {
   it("nas duas consultas agrupadas", async () => {
-    await getReportSummary("user-1", { month: "2026-09" });
+    await getReportSummary(escopo, { month: "2026-09" });
 
     expect(groupBy).toHaveBeenCalledTimes(2);
     for (const chamada of groupBy.mock.calls) {
-      expect(chamada[0].where).toMatchObject({ compensationId: null });
+      expect(chamada[0].where).toMatchObject({
+        compensationId: null,
+        userId: { in: ["user-1"] },
+      });
     }
   });
 
   it("na série mensal, que é SQL cru", async () => {
-    await getReportSummary("user-1", { month: "2026-09" });
+    await getReportSummary(escopo, { month: "2026-09" });
 
     expect(queryRaw).toHaveBeenCalledTimes(1);
     // O primeiro argumento de uma template tag é o array de pedaços do SQL.

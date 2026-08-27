@@ -3,6 +3,7 @@ import type { PluggyClient } from "pluggy-sdk";
 import { Prisma, SystemCategoryKey } from "@prisma/client";
 import { prisma } from "../../prisma";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import type { Scope } from "../../lib/scope";
 import {
   JANELA_DE_PAGAMENTO_DIAS,
   casarPagamentos,
@@ -78,8 +79,10 @@ export async function sincronizarFaturas(
  * Marca como "Pagamento de fatura" as duas pontas de um pagamento — e desmarca
  * o que deixou de ser.
  *
- * Roda depois do sync, sobre o usuario inteiro, porque as duas pontas moram em
- * contas diferentes e podem ter chegado em sincronizacoes diferentes.
+ * Roda depois do sync, sobre o espaco inteiro, porque as duas pontas moram em
+ * contas diferentes — de membros diferentes, ate — e podem ter chegado em
+ * sincronizacoes diferentes. Um cartao do parceiro pago pela conta corrente de
+ * quem sincronizou so e reconhecido porque este servico soma os dois.
  *
  * **As duas pontas, sempre.** Marcar so o debito da conta corrente deixava o
  * credito do cartao contando como receita: no caso real, um pagamento de
@@ -99,14 +102,18 @@ export async function sincronizarFaturas(
  * que permite corrigir o que uma versao anterior marcou errado, e o que torna a
  * funcao idempotente.
  */
-export async function reconhecerPagamentos(userId: string): Promise<number> {
-  const systemIds = await ensureSystemCategories(prisma, userId);
+export async function reconhecerPagamentos(scope: Scope): Promise<number> {
+  const systemIds = await ensureSystemCategories(prisma, scope.householdId);
   const billPaymentId = systemIds[SystemCategoryKey.BILL_PAYMENT];
   const transferId = systemIds[SystemCategoryKey.TRANSFER];
 
   // Despesas em conta que nao e cartao: a ponta de onde o dinheiro sai.
   const despesas = await prisma.transaction.findMany({
-    where: { userId, type: "EXPENSE", account: { type: { not: "CREDIT" } } },
+    where: {
+      userId: { in: scope.memberIds },
+      type: "EXPENSE",
+      account: { type: { not: "CREDIT" } },
+    },
     select: {
       id: true,
       accountId: true,
@@ -120,7 +127,7 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
 
   // Creditos em conta de cartao: a ponta que a quitacao lanca no proprio cartao.
   const creditos = await prisma.transaction.findMany({
-    where: { userId, type: "INCOME", account: { type: "CREDIT" } },
+    where: { userId: { in: scope.memberIds }, type: "INCOME", account: { type: "CREDIT" } },
     select: {
       id: true,
       accountId: true,
@@ -142,7 +149,11 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
 
   const pernasEmCartao = await buscarEmLotes(idsDePar, (lote) =>
     prisma.transaction.findMany({
-      where: { userId, transferPairId: { in: lote }, account: { type: "CREDIT" } },
+      where: {
+        userId: { in: scope.memberIds },
+        transferPairId: { in: lote },
+        account: { type: "CREDIT" },
+      },
       select: { transferPairId: true },
     })
   );
@@ -162,7 +173,7 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
   //        quando. E prova suficiente por si, entao o debito e reconhecido
   //        mesmo que o credito do cartao nao tenha sido importado.
   const faturasPagas = await prisma.creditCardBill.findMany({
-    where: { userId, paidAt: { not: null }, paidAmount: { not: null } },
+    where: { userId: { in: scope.memberIds }, paidAt: { not: null }, paidAmount: { not: null } },
     select: { pluggyBillId: true, accountId: true, paidAt: true, paidAmount: true },
   });
 
@@ -255,7 +266,7 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
       if (linha.categoryId === billPaymentId && linha.transferPairId === parNovo) continue;
       marcacoes.push(
         prisma.transaction.updateMany({
-          where: { id: linha.id, userId },
+          where: { id: linha.id, userId: { in: scope.memberIds } },
           data: { categoryId: billPaymentId, transferPairId: parNovo },
         })
       );
@@ -282,7 +293,7 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
   const marcados = [...reconhecidos];
   for (const lote of emLotes(marcados)) {
     await prisma.categorySuggestion.deleteMany({
-      where: { userId, transactionId: { in: lote }, status: "PENDING" },
+      where: { userId: { in: scope.memberIds }, transactionId: { in: lote }, status: "PENDING" },
     });
   }
 
@@ -291,12 +302,12 @@ export async function reconhecerPagamentos(userId: string): Promise<number> {
   // ele so existia por causa da marcacao que acabou de sair.
   for (const lote of emLotes(paraReverter)) {
     await prisma.transaction.updateMany({
-      where: { id: { in: lote }, userId },
+      where: { id: { in: lote }, userId: { in: scope.memberIds } },
       data: { transferPairId: null },
     });
   }
 
-  await enfileirarParaRevisao(userId, paraReverter);
+  await enfileirarParaRevisao(scope.userId, paraReverter);
 
   return marcacoes.length + paraReverter.length;
 }
