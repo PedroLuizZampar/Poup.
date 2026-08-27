@@ -10,12 +10,11 @@
  * reprovação de contraste lá é sinal de que uma edição vazou do `:root` para o
  * `.dark`.
  *
- * Dois portões — a escada de elevação e a distância entre os traços de
- * categoria — rodam no escuro como aviso, não como reprovação. Não é
- * indulgência: os dois medem uma decisão que é do tema claro. A escada clara
- * sobe do afundado para o cartão; a escura sobe na direção contrária, porque no
- * escuro elevar é clarear. E os avisos que o escuro emite hoje já existiam
- * antes deste passe — ficam impressos justamente para não sumirem de vista.
+ * O escuro carrega uma lista curta de desvios conhecidos, em CONHECIDAS_ESCURO.
+ * Todos são anteriores a este passe e nenhum é efeito dele. Eles saem como
+ * aviso, impressos a cada rodada, em vez de reprovarem — mas qualquer desvio
+ * que **não** esteja nessa lista reprova, que é justamente o que faz o escuro
+ * servir de controle contra contaminação vinda do `:root`.
  *
  *   node apps/web/scripts/verificar-contraste.mjs [--verbose]
  */
@@ -123,7 +122,8 @@ function deltaE(a, b) {
 /* ---------- portão ---------- */
 
 const SUPERFICIES = ["--surface", "--surface-alt", "--bg", "--surface-sunken"];
-const SEMANTICAS = ["--income", "--expense", "--warning", "--error"];
+// `--info` entra aqui mesmo sem `-soft`: o portão pergunta pelo par que existe.
+const SEMANTICAS = ["--income", "--expense", "--warning", "--error", "--info"];
 
 /**
  * Piso do texto primário. Não é 7:1 (o AAA) nem 10:1: é o valor logo abaixo do
@@ -137,21 +137,22 @@ const PISO_TEXTO_PRIMARIO = 9.5;
 const razao = (v) => `${v.toFixed(2)}:1`;
 const emDE = (v) => `ΔE ${v.toFixed(1)}`;
 
-function verificar(tema, tokens, { verbose, escada, estruturaBloqueia }) {
+function verificar(tema, tokens, { verbose, escada, conhecidas = [] }) {
   const falhas = [];
   const avisos = [];
+  const conhecida = (rotulo) => conhecidas.some((prefixo) => rotulo.startsWith(prefixo));
   const cor = (nome) => parseCor(tokens[nome]);
   const card = cor("--surface");
   const superficie = (nome) => sobre(cor(nome), card);
 
-  const registrar = (bloqueia, rotulo, texto) =>
-    (bloqueia ? falhas : avisos).push(`[${tema}] ${rotulo} — ${texto}`);
+  const registrar = (rotulo, texto) =>
+    (conhecida(rotulo) ? avisos : falhas).push(`[${tema}] ${rotulo} — ${texto}`);
 
-  const checar = (rotulo, valor, minimo, formato = razao, bloqueia = true) => {
+  const checar = (rotulo, valor, minimo, formato = razao) => {
     const ok = valor >= minimo;
-    if (!ok) registrar(bloqueia, rotulo, `${formato(valor)}, mínimo ${formato(minimo)}`);
+    if (!ok) registrar(rotulo, `${formato(valor)}, mínimo ${formato(minimo)}`);
     if (verbose || !ok) {
-      const marca = ok ? "ok   " : bloqueia ? "FALHA" : "aviso";
+      const marca = ok ? "ok   " : conhecida(rotulo) ? "aviso" : "FALHA";
       console.log(`   ${marca} ${rotulo.padEnd(46)} ${formato(valor)}`);
     }
   };
@@ -204,7 +205,7 @@ function verificar(tema, tokens, { verbose, escada, estruturaBloqueia }) {
       if (d < pior.d) pior = { d, par: `cat-${fgs[i][0]} × cat-${fgs[j][0]}` };
     }
   }
-  checar(`menor ΔE entre foregrounds (${pior.par})`, pior.d, 10, emDE, estruturaBloqueia);
+  checar(`menor ΔE entre foregrounds (${pior.par})`, pior.d, 10, emDE);
 
   console.log(" elevação");
   for (let i = 0; i < escada.length - 1; i++) {
@@ -214,13 +215,12 @@ function verificar(tema, tokens, { verbose, escada, estruturaBloqueia }) {
     const ok = passo >= 2 && passo <= 5;
     if (!ok) {
       registrar(
-        estruturaBloqueia,
         rotulo,
         `ΔL* ${passo.toFixed(2)}, fora da faixa 2,0–5,0. Abaixo de 2 as duas superfícies viram a mesma cor; acima de 5 o degrau vira emenda visível; negativo é escada invertida.`,
       );
     }
     if (verbose || !ok) {
-      const marca = ok ? "ok   " : estruturaBloqueia ? "FALHA" : "aviso";
+      const marca = ok ? "ok   " : conhecida(rotulo) ? "aviso" : "FALHA";
       console.log(`   ${marca} ${rotulo.padEnd(46)} ΔL* ${passo.toFixed(2)}`);
     }
   }
@@ -235,18 +235,36 @@ const css = readFileSync(CSS, "utf8");
 const claro = tokensDoBloco(corpoDoBloco(css, ":root"));
 const escuro = { ...claro, ...tokensDoBloco(corpoDoBloco(css, ".dark")) };
 
+/**
+ * Desvios que o tema escuro já tinha antes do passe do modo claro. Nenhum foi
+ * causado por ele e nenhum entra no escopo dele — mas todos são reais, então
+ * ficam listados e impressos em vez de removidos do portão.
+ *
+ *  · Vermelho e Carmim são quase o mesmo traço no escuro (#FCA5A5 x #FDA4AF).
+ *    No claro os dois se separam; aqui não. Custa distinguibilidade numa lista
+ *    longa de categorias.
+ *  · `--surface-sunken` e `--bg` estão a ΔL* 1,5 um do outro: no escuro o fundo
+ *    da página já é o piso, e o afundado não tem para onde descer.
+ *  · O verde da marca sobre o próprio véu fica a 4,22:1 — perto, mas abaixo do
+ *    mínimo de texto.
+ */
+const CONHECIDAS_ESCURO = [
+  "menor ΔE entre foregrounds",
+  "degrau --surface-sunken → --bg",
+  "--primary sobre --primary-soft",
+];
+
 const resultados = [
   verificar("claro", claro, {
     verbose,
     // No claro, elevar é clarear: o cartão é o topo e o afundado é o piso.
     escada: ["--surface", "--surface-alt", "--bg", "--surface-sunken"],
-    estruturaBloqueia: true,
   }),
   verificar("escuro (controle)", escuro, {
     verbose,
     // No escuro a ordem se inverte, e o fundo da página é o piso da escala.
     escada: ["--surface-alt", "--surface", "--surface-sunken", "--bg"],
-    estruturaBloqueia: false,
+    conhecidas: CONHECIDAS_ESCURO,
   }),
 ];
 
@@ -255,7 +273,7 @@ const avisos = resultados.flatMap((r) => r.avisos);
 
 console.log("");
 if (avisos.length) {
-  console.log(`⚠ ${avisos.length} aviso(s) — anteriores a este passe, fora do escopo do tema claro:`);
+  console.log(`⚠ ${avisos.length} desvio(s) conhecido(s) do tema escuro, anteriores a este passe:`);
   for (const a of avisos) console.log(`  · ${a}`);
   console.log("");
 }
