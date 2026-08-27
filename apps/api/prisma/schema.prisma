@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   /// `rhel-openssl-3.0.x` e o runtime das funcoes da Vercel. Sem ele o client
   /// gerado so traz o engine da maquina que rodou o build, e a funcao sobe sem
   /// conseguir falar com o banco.
@@ -73,37 +73,85 @@ enum SuggestionStatus {
   DISMISSED
 }
 
+enum HouseholdInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+/// O espaco em que categorias, orcamentos e metas vivem.
+///
+/// Todo usuario tem um desde o cadastro, mesmo sozinho: sem isso a fusao teria
+/// de lidar com dois casos (tem espaco / nao tem) e toda leitura precisaria de
+/// um fallback para `userId`.
+model Household {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  members    User[]
+  categories Category[]
+  budgets    Budget[]
+  goals      Goal[]
+  invites    HouseholdInvite[]
+}
+
+/// Convite para entrar num espaco.
+///
+/// O e-mail e guardado ao lado do `inviteeId` para que o registro continue
+/// legivel depois: quem convidou precisa ver para quem mandou, e nome e e-mail
+/// do outro podem mudar.
+model HouseholdInvite {
+  id           String                @id @default(uuid())
+  householdId  String
+  inviterId    String
+  inviteeId    String
+  inviteeEmail String
+  status       HouseholdInviteStatus @default(PENDING)
+  createdAt    DateTime              @default(now())
+  respondedAt  DateTime?
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  inviter   User      @relation("InvitesSent", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee   User      @relation("InvitesReceived", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@index([inviteeId, status])
+  @@index([householdId, status])
+}
+
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  name         String
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
   /// Foto de perfil como data URL (base64). Enviada pelo app já redimensionada.
-  avatarUrl    String?  @db.Text
+  avatarUrl          String?  @db.Text
   /// Credenciais da aplicação Pluggy do usuário. Ficam por usuário — e não no
   /// ambiente — para que cada conta fale com a Pluggy com a própria aplicação.
   /// O secret é guardado cifrado (AES-256-GCM, ver src/lib/crypto.ts).
   pluggyClientId     String?
-  pluggyClientSecret String? @db.Text
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  pluggyClientSecret String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  householdId        String
 
-  items         Item[]
-  accounts      Account[]
-  categories    Category[]
-  transactions  Transaction[]
-  budgets       Budget[]
-  goals         Goal[]
-  notifications Notification[]
+  items               Item[]
+  accounts            Account[]
+  transactions        Transaction[]
+  notifications       Notification[]
   categorySuggestions CategorySuggestion[]
-  creditCardBills CreditCardBill[]
+  creditCardBills     CreditCardBill[]
+  goalsCreated        Goal[]
+  household           Household            @relation(fields: [householdId], references: [id])
+  invitesSent         HouseholdInvite[]    @relation("InvitesSent")
+  invitesReceived     HouseholdInvite[]    @relation("InvitesReceived")
 }
 
 model Item {
-  id             String     @id @default(uuid())
-  userId         String
-  pluggyItemId   String     @unique
-  institutionName String
+  id                  String     @id @default(uuid())
+  userId              String
+  pluggyItemId        String     @unique
+  institutionName     String
   /// Logo do conector, servida pela Pluggy (CDN). Pode ser sobrescrita por um
   /// arquivo local em apps/desktop/public/institutions/<slug>.(svg|png).
   institutionImageUrl String?
@@ -113,15 +161,15 @@ model Item {
   /// coluna separada de `institutionImageUrl` justamente para que o sync — que
   /// só escreve aquela — nunca sobrescreva a escolha do usuário.
   customImageUrl      String?    @db.Text
-  status         ItemStatus @default(UPDATING)
-  lastSyncedAt   DateTime?
+  status              ItemStatus @default(UPDATING)
+  lastSyncedAt        DateTime?
   /// O webhook avisou que ha transacao nova nesta conexao, e o sync ainda nao
   /// rodou. E so um aviso na tela: o app nunca sincroniza sozinho, porque o
   /// tempo de uma funcao serverless nao comporta um sync de tamanho
   /// desconhecido disparado por evento externo.
-  hasPendingSync Boolean    @default(false)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  hasPendingSync      Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accounts Account[]
@@ -130,39 +178,39 @@ model Item {
 }
 
 model Account {
-  id               String      @id @default(uuid())
-  userId           String
-  itemId           String?
-  pluggyAccountId  String?     @unique
-  name             String
+  id                  String       @id @default(uuid())
+  userId              String
+  itemId              String?
+  pluggyAccountId     String?      @unique
+  name                String
   /// Nome dado pelo usuário. Tem precedência sobre `name`, que o sync reescreve
   /// a cada atualização a partir dos dados da Pluggy.
-  customName       String?
-  type             AccountType
-  balance          Decimal     @default(0) @db.Decimal(14, 2)
+  customName          String?
+  type                AccountType
+  balance             Decimal      @default(0) @db.Decimal(14, 2)
   /// Preferência de exibição: a conta sai dos cards de saldo do Dashboard e
   /// continua valendo em transações, relatórios e orçamentos.
-  excludedFromBalance Boolean  @default(false)
+  excludedFromBalance Boolean      @default(false)
   /// Tipo escolhido pelo usuario. Tem precedencia sobre `type`, que o sync
   /// reescreve a cada atualizacao a partir do que a Pluggy derivou. Mesma
   /// divisao de `name`/`customName`: o sync escreve uma coluna e nunca a outra.
-  customType       AccountType?
+  customType          AccountType?
   /// Dia do mes em que a fatura do cartao vence, 1 a 31. Semeado do
   /// `creditData.balanceDueDate` da Pluggy no primeiro contato e, dali em
   /// diante, so o usuario muda. E o que transforma o mes da fatura de uma
   /// parcela (`Transaction.billMonth`) numa data de vencimento — por isso mora
   /// na conta, e nao repetido em cada transacao: corrigir o dia aqui conserta
   /// todas as parcelas de uma vez.
-  creditCardDueDay Int?
-  institutionName  String?
-  lastSyncedAt     DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  creditCardDueDay    Int?
+  institutionName     String?
+  lastSyncedAt        DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  item         Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  transactions Transaction[]
-  goals        Goal[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item            Item?            @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  transactions    Transaction[]
+  goals           Goal[]
   creditCardBills CreditCardBill[]
 
   @@index([userId])
@@ -201,41 +249,41 @@ model CreditCardBill {
 }
 
 model Category {
-  id        String   @id @default(uuid())
-  userId    String
-  name      String
-  icon      String
-  colorKey  String
+  id          String             @id @default(uuid())
+  householdId String
+  name        String
+  icon        String
+  colorKey    String
   /// Despesa fixa ou variavel. Toda categoria tem uma, inclusive as de receita:
   /// nao ha tipo na categoria, entao quem decide o que e fixo e o usuario.
-  kind      CategoryKind @default(VARIABLE)
+  kind        CategoryKind       @default(VARIABLE)
   /// Marca as categorias que o app cria e mantém. Não aparecem em seletores,
   /// não podem ser renomeadas nem excluídas, e não aceitam orçamento. Existem
   /// para que nenhuma transação precise ficar com `categoryId` nulo.
-  systemKey SystemCategoryKey?
-  createdAt DateTime @default(now())
+  systemKey   SystemCategoryKey?
+  createdAt   DateTime           @default(now())
 
-  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions  Transaction[]
-  budgets       Budget[]
-  suggestions   CategorySuggestion[] @relation("SuggestedCategory")
+  household    Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+  suggestions  CategorySuggestion[] @relation("SuggestedCategory")
 
-  @@unique([userId, name])
-  @@unique([userId, systemKey])
+  @@unique([householdId, name])
+  @@unique([householdId, systemKey])
 }
 
 model Transaction {
-  id                  String           @id @default(uuid())
+  id                  String          @id @default(uuid())
   userId              String
   accountId           String
   categoryId          String?
-  pluggyTransactionId String?          @unique
+  pluggyTransactionId String?         @unique
   description         String
-  amount              Decimal          @db.Decimal(14, 2)
+  amount              Decimal         @db.Decimal(14, 2)
   type                TransactionType
   date                DateTime
   note                String?
-  isRecurring         Boolean          @default(false)
+  isRecurring         Boolean         @default(false)
   /// Numero desta parcela e total de parcelas, como a Pluggy os entrega em
   /// `creditCardMetadata`. Os dois andam juntos: meia parcela nao e parcela, e
   /// quando so um dos dois vem, ambos ficam nulos.
@@ -283,8 +331,8 @@ model Transaction {
   /// e o que impede o sync, o reparo e o webhook de desfazerem o que a pessoa
   /// resolveu a mao.
   compensationId      String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   account    Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -302,35 +350,42 @@ model Transaction {
 
 model Budget {
   id           String   @id @default(uuid())
-  userId       String
+  householdId  String
   categoryId   String
   monthlyLimit Decimal  @db.Decimal(14, 2)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, categoryId])
+  @@unique([householdId, categoryId])
 }
 
 model Goal {
-  id            String    @id @default(uuid())
-  userId        String
+  id              String    @id @default(uuid())
+  householdId     String
   /// Conta cujo saldo é o acumulado da meta. Obrigatória na API; nullable aqui
   /// para que excluir a conta não leve a meta junto — ela fica órfã e a UI pede
   /// que o usuário vincule outra.
-  accountId     String?
-  name          String
-  targetAmount  Decimal   @db.Decimal(14, 2)
-  targetDate    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  accountId       String?
+  /// Quem criou a meta. E o que a dissolucao usa para decidir com quem ela
+  /// fica: `accountId` nao serve, porque e anulavel de proposito e meta sem
+  /// conta ficaria sem destino.
+  createdByUserId String
+  name            String
+  targetAmount    Decimal   @db.Decimal(14, 2)
+  targetDate      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account   Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  createdBy User      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([householdId])
+  @@index([createdByUserId])
 }
 
 model Notification {
