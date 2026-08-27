@@ -125,6 +125,15 @@ function deltaE(a, b) {
 const SUPERFICIES = ["--surface", "--surface-alt", "--bg", "--surface-sunken"];
 const SEMANTICAS = ["--income", "--expense", "--warning", "--error"];
 
+/**
+ * Piso do texto primário. Não é 7:1 (o AAA) nem 10:1: é o valor logo abaixo do
+ * pior caso do desenho atual — o primário sobre `--surface-sunken`, a 9,65:1.
+ * O portão aqui não existe para exigir mais contraste, e sim para impedir que
+ * uma varredura futura "conserte" o texto de volta para 16:1 sobre branco puro,
+ * que foi exatamente o que cansava a vista.
+ */
+const PISO_TEXTO_PRIMARIO = 9.5;
+
 const razao = (v) => `${v.toFixed(2)}:1`;
 const emDE = (v) => `ΔE ${v.toFixed(1)}`;
 
@@ -151,7 +160,7 @@ function verificar(tema, tokens, { verbose, escada, estruturaBloqueia }) {
 
   console.log(" texto");
   for (const s of SUPERFICIES) {
-    checar(`--text-primary sobre ${s}`, contraste(cor("--text-primary"), superficie(s)), 10);
+    checar(`--text-primary sobre ${s}`, contraste(cor("--text-primary"), superficie(s)), PISO_TEXTO_PRIMARIO);
   }
   for (const s of SUPERFICIES) {
     checar(`--text-secondary sobre ${s}`, contraste(cor("--text-secondary"), superficie(s)), 4.5);

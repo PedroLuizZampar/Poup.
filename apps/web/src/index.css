@@ -34,10 +34,18 @@
   --border-strong:      #BFD0C6;
   --border-strong-rgb:  191 208 198;
 
-  /* Texto */
-  --text-primary:   #16211C;
-  --text-secondary: #6B7A72;
-  --text-disabled:  #A7B3AD;
+  /* Texto.
+     O primário deixou de perseguir o contraste máximo. Quase-preto sobre
+     branco dava 16,56:1 — 2,4x além do que o AAA pede — e isso não é virtude,
+     é a combinação clássica de halation, que "queima" em leitura longa. A
+     12:1 o AAA continua sobrando e o texto para de vibrar.
+     O secundário foi resolvido contra `--surface-sunken`, que é o fundo mais
+     escuro em que ele de fato aparece; resolver contra o cartão deixaria esses
+     pontos reprovando. O desabilitado é decorativo — não carrega informação,
+     então não precisa passar em contraste. */
+  --text-primary:   #283832;
+  --text-secondary: #55695F;
+  --text-disabled:  #90A398;
 
   /* Marca e ação */
   --primary:        #1F7A54;
