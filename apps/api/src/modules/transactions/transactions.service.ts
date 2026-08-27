@@ -20,6 +20,7 @@ import { vencimentoDaFatura } from "../../lib/pluggyMapping";
 import { statusDaParcela } from "../../lib/statusDaParcela";
 import { buscarEmLotes } from "../../lib/lotes";
 import { reopenPendingSuggestion } from "../categorization/categorization.service";
+import { resolveAccountName } from "../accounts/accounts.service";
 
 export { AccountNotFoundError, CategoryNotFoundError, TransactionNotFoundError };
 
@@ -64,7 +65,7 @@ export interface UpdateTransactionInput {
  * e com data em outras.
  */
 export const TX_INCLUDE = {
-  account: { select: { name: true, creditCardDueDay: true } },
+  account: { select: { name: true, customName: true, creditCardDueDay: true } },
   category: { select: { name: true } },
 } as const;
 
@@ -77,7 +78,7 @@ export function formatTransactionDTO(tx: {
   note: string | null;
   isRecurring: boolean;
   accountId: string;
-  account: { name: string; creditCardDueDay: number | null };
+  account: { name: string; customName: string | null; creditCardDueDay: number | null };
   categoryId: string | null;
   category: { name: string } | null;
   installmentIndex: number | null;
@@ -96,7 +97,7 @@ export function formatTransactionDTO(tx: {
     note: tx.note,
     isRecurring: tx.isRecurring,
     accountId: tx.accountId,
-    accountName: tx.account.name,
+    accountName: resolveAccountName(tx.account),
     categoryId: tx.categoryId,
     categoryName: tx.category?.name ?? null,
     installmentIndex: tx.installmentIndex,
