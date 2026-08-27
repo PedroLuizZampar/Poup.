@@ -108,8 +108,9 @@ export async function generateAutomaticAlerts(scope: Scope): Promise<number> {
   let createdCount = 0;
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  // A notificação é individual — quem checou é quem recebe o aviso, mesmo o
-  // orçamento sendo do espaço inteiro.
+  // Trocado de userId para Scope só para compilar contra o novo listBudgets —
+  // ainda notifica só quem chamou o /check, não os dois membros do espaço. O
+  // fan-out por membro é da Task 9.
   const userId = scope.userId;
 
   // 1. Checar Orçamentos do mês atual
