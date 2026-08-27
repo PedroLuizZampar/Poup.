@@ -122,10 +122,14 @@
   --cat-15-bg: #EAEDEB; --cat-15-fg: #47735E; /* Sálvia */
   --cat-16-bg: #EBEDEE; --cat-16-fg: #475569; /* Grafite */
 
-  /* Elevação */
-  --sh1: 0 1px 2px rgba(0,0,0,.06);
-  --sh2: 0 4px 14px rgba(0,0,0,.07);
-  --sh3: 0 16px 40px rgba(0,0,0,.10);
+  /* Elevação.
+     A sombra é tingida do mesmo verde dos neutros: preto puro derramado sobre
+     um tema de neutros verdes não lê como sombra, lê como sujeira cinza.
+     O alpha caiu junto (era .06/.07/.10) porque o cartão não é mais branco
+     puro — sobre uma superfície mais baixa, a mesma sombra pesa mais. */
+  --sh1: 0 1px 2px  rgba(31,58,45,.05);
+  --sh2: 0 4px 14px rgba(31,58,45,.06);
+  --sh3: 0 16px 40px rgba(31,58,45,.09);
   --ring: 0 0 0 3px rgba(36,122,86,.28);
   --focus-color:  #247A56;
   --focus-width:  2px;

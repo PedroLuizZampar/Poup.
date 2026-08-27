@@ -162,6 +162,10 @@ Tudo o mais depende desta fase. Nenhum componente é tocado antes dela.
 
 Substituir o bloco `colors` do Tailwind por variáveis CSS comutadas por classe. O tema claro é o do protótipo, sem alteração de valor.
 
+> **Os valores do tema claro abaixo estão superados.** Em 27/08/2026 o `:root` foi recalibrado por [`docs/superpowers/plans/2026-08-27-modo-claro-mais-suave.md`](superpowers/plans/2026-08-27-modo-claro-mais-suave.md); o bloco aqui é o registro do que a Fase 0 entregou, não o estado atual. O valor corrente de qualquer token está em `apps/web/src/index.css`.
+
+> **Por que o modo claro deixou de perseguir contraste máximo.** O `--text-primary` original dava 16,56:1 sobre branco puro — 2,4x além do que o AAA pede — e o cartão ficava no topo absoluto da escala de luminância. Isso não era rigor, era halation: em leitura longa o texto vibra e a tela cansa. O cartão saiu do branco puro, o texto desceu para ~12:1 e as semânticas escureceram até virarem legíveis. Uma varredura futura que encontrar 12:1 e "consertar" para 16:1 estará desfazendo a correção, não aplicando uma. O portão que segura isso é `apps/web/scripts/verificar-contraste.mjs`, e ele mede — o número reprova, o olho só confirma.
+
 ```css
 :root {
   /* Superfícies — tema claro (valores do protótipo, intocados) */
