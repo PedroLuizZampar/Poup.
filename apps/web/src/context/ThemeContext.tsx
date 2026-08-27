@@ -14,7 +14,7 @@ const STORAGE_KEY = "poup:theme";
  *  pinta a barra do navegador e a moldura do app instalado — se divergir do
  *  fundo, aparece uma faixa de cor errada acima do conteúdo. */
 const THEME_COLOR: Record<Theme, string> = {
-  light: "#F6FAF7",
+  light: "#E5EDE9",
   dark: "#0F0F10",
 };
 

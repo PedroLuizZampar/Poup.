@@ -24,7 +24,24 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
-const CSS = join(AQUI, "..", "src", "index.css");
+const RAIZ = join(AQUI, "..");
+const CSS = join(RAIZ, "src", "index.css");
+
+/**
+ * Três arquivos precisam repetir `--bg` de cada tema à mão, porque nenhum deles
+ * consegue ler CSS: a meta `theme-color` do HTML, que pinta a barra do
+ * navegador antes de o JS subir; o mapa do ThemeContext, que reescreve essa
+ * meta depois; e o manifest do PWA, que dá a cor da splash. Divergir de `--bg`
+ * dá uma faixa de cor errada acima do conteúdo ou um pisca na abertura — e o
+ * defeito não aparece em nenhum teste. Já aconteceu uma vez, no passe que
+ * baixou o fundo do tema claro.
+ */
+const ESPELHOS_DO_BG = [
+  { arquivo: "index.html", temas: ["claro", "escuro"] },
+  { arquivo: "src/context/ThemeContext.tsx", temas: ["claro", "escuro"] },
+  // O manifest do PWA tem uma cor de splash só: não existe versão escura dele.
+  { arquivo: "vite.config.ts", temas: ["claro"] },
+];
 
 /* ---------- leitura dos tokens ---------- */
 
@@ -270,6 +287,23 @@ const resultados = [
 
 const falhas = resultados.flatMap((r) => r.falhas);
 const avisos = resultados.flatMap((r) => r.avisos);
+
+/* ---------- espelhos de --bg fora do CSS ---------- */
+
+const bgDoTema = { claro: claro["--bg"], escuro: escuro["--bg"] };
+for (const { arquivo, temas } of ESPELHOS_DO_BG) {
+  const texto = readFileSync(join(RAIZ, arquivo), "utf8").toUpperCase();
+  for (const tema of temas) {
+    const cor = bgDoTema[tema].toUpperCase();
+    if (!texto.includes(cor)) {
+      falhas.push(
+        `[espelho] ${arquivo} não menciona ${cor}, o --bg do tema ${tema}. ` +
+          `Esse arquivo repete a cor à mão para pintar a barra do navegador ou a ` +
+          `splash, e divergir de --bg dá faixa de cor errada acima do conteúdo.`,
+      );
+    }
+  }
+}
 
 console.log("");
 if (avisos.length) {

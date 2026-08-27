@@ -21,8 +21,8 @@ export default defineConfig({
         orientation: "portrait",
         // Casam com `--bg` e `--primary` do tema claro: é o que o sistema pinta
         // na splash antes de o app existir, e divergir aí dá um pisca de cor.
-        background_color: "#F6FAF7",
-        theme_color: "#F6FAF7",
+        background_color: "#E5EDE9",
+        theme_color: "#E5EDE9",
         categories: ["finance", "productivity"],
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
