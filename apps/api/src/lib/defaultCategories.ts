@@ -29,21 +29,19 @@ export const DEFAULT_CATEGORIES = [
 /** Idempotente: pode rodar de novo sobre uma conta que já tem as categorias. */
 export async function createDefaultCategories(
   client: Pick<PrismaClient, "category">,
-  userId: string
-): Promise<number> {
+  householdId: string
+): Promise<void> {
   for (const category of DEFAULT_CATEGORIES) {
     await client.category.upsert({
-      where: { userId_name: { userId, name: category.name } },
+      where: { householdId_name: { householdId, name: category.name } },
       // `kind` fica de fora do update de propósito: reexecutar isto sobre uma
       // conta existente não pode desfazer o que o usuário classificou à mão.
       update: { icon: category.icon, colorKey: category.colorKey },
-      create: { ...category, userId },
+      create: { ...category, householdId },
     });
   }
 
   // As de sistema vêm junto: conta nova já nasce podendo receber transação sem
   // que exista o estado "sem categoria nenhuma".
-  await ensureSystemCategories(client, userId);
-
-  return DEFAULT_CATEGORIES.length;
+  await ensureSystemCategories(client, householdId);
 }

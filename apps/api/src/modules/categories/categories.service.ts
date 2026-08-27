@@ -29,26 +29,26 @@ export interface UpdateCategoryInput {
   kind?: CategoryKind;
 }
 
-export async function listCategories(userId: string) {
+export async function listCategories(householdId: string) {
   return prisma.category.findMany({
-    where: { userId },
+    where: { householdId },
     orderBy: { name: "asc" },
   });
 }
 
-export async function getCategoryById(userId: string, id: string) {
+export async function getCategoryById(householdId: string, id: string) {
   return prisma.category.findFirst({
-    where: { id, userId },
+    where: { id, householdId },
   });
 }
 
-export async function createCategory(userId: string, input: CreateCategoryInput) {
+export async function createCategory(householdId: string, input: CreateCategoryInput) {
   const trimmedName = input.name.trim();
 
   const existing = await prisma.category.findUnique({
     where: {
-      userId_name: {
-        userId,
+      householdId_name: {
+        householdId,
         name: trimmedName,
       },
     },
@@ -63,7 +63,7 @@ export async function createCategory(userId: string, input: CreateCategoryInput)
 
   return prisma.category.create({
     data: {
-      userId,
+      householdId,
       name: trimmedName,
       icon: input.icon || "folder",
       colorKey: normalizedColorKey,
@@ -72,9 +72,13 @@ export async function createCategory(userId: string, input: CreateCategoryInput)
   });
 }
 
-export async function updateCategory(userId: string, id: string, input: UpdateCategoryInput) {
+export async function updateCategory(
+  householdId: string,
+  id: string,
+  input: UpdateCategoryInput
+) {
   const existing = await prisma.category.findFirst({
-    where: { id, userId },
+    where: { id, householdId },
   });
 
   if (!existing) {
@@ -90,8 +94,8 @@ export async function updateCategory(userId: string, id: string, input: UpdateCa
     if (trimmedName !== existing.name) {
       const duplicate = await prisma.category.findUnique({
         where: {
-          userId_name: {
-            userId,
+          householdId_name: {
+            householdId,
             name: trimmedName,
           },
         },
@@ -127,9 +131,9 @@ export async function updateCategory(userId: string, id: string, input: UpdateCa
  * são reatribuídas às ocultas antes, e tudo roda numa transação — meio caminho
  * aqui deixaria linhas nulas para trás.
  */
-export async function deleteCategory(userId: string, id: string) {
+export async function deleteCategory(householdId: string, id: string) {
   const existing = await prisma.category.findFirst({
-    where: { id, userId },
+    where: { id, householdId },
   });
 
   if (!existing) {
@@ -141,10 +145,15 @@ export async function deleteCategory(userId: string, id: string) {
   }
 
   await prisma.$transaction(async (tx) => {
-    const systemIds = await ensureSystemCategories(tx, userId);
+    const systemIds = await ensureSystemCategories(tx, householdId);
 
+    // Transaction e CategorySuggestion ainda são por usuário, não por espaço —
+    // mas a categoria é do espaço inteiro, então o `categoryId` já basta para
+    // achar todo mundo afetado, de qualquer membro do household. Filtrar por um
+    // único usuário deixaria as transações dos outros membros apontando para
+    // uma categoria que está prestes a deixar de existir.
     await tx.transaction.updateMany({
-      where: { userId, categoryId: id },
+      where: { categoryId: id },
       data: { categoryId: systemIds.UNCATEGORIZED },
     });
 
@@ -153,7 +162,7 @@ export async function deleteCategory(userId: string, id: string) {
     // vinda do histórico. Aqui as pendentes viram explicitamente "sem palpite",
     // que é o que de fato sobrou — e as transações seguem na fila de revisão.
     await tx.categorySuggestion.updateMany({
-      where: { userId, categoryId: id, status: SuggestionStatus.PENDING },
+      where: { categoryId: id, status: SuggestionStatus.PENDING },
       data: { categoryId: null, source: SuggestionSource.NONE, confidence: 0 },
     });
 

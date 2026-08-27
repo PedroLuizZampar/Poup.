@@ -40,17 +40,17 @@ export type SystemCategoryIds = Record<SystemCategoryKey, string>;
 /**
  * Idempotente, e tolerante a quem já tinha uma categoria com o nome reservado:
  * nesse caso adota a linha existente em vez de tentar criar outra e esbarrar no
- * unique (userId, name).
+ * unique (householdId, name).
  */
 export async function ensureSystemCategories(
   client: Pick<PrismaClient, "category">,
-  userId: string
+  householdId: string
 ): Promise<SystemCategoryIds> {
   const ids = {} as SystemCategoryIds;
 
   for (const def of SYSTEM_CATEGORY_DEFS) {
     const byKey = await client.category.findFirst({
-      where: { userId, systemKey: def.systemKey },
+      where: { householdId, systemKey: def.systemKey },
       select: { id: true },
     });
     if (byKey) {
@@ -59,7 +59,7 @@ export async function ensureSystemCategories(
     }
 
     const byName = await client.category.findUnique({
-      where: { userId_name: { userId, name: def.name } },
+      where: { householdId_name: { householdId, name: def.name } },
       select: { id: true },
     });
     if (byName) {
@@ -74,7 +74,7 @@ export async function ensureSystemCategories(
 
     const created = await client.category.create({
       data: {
-        userId,
+        householdId,
         name: def.name,
         icon: def.icon,
         colorKey: def.colorKey,

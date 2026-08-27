@@ -36,7 +36,7 @@ const updateCategorySchema = z.object({
 categoriesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const categories = await listCategories(req.userId!);
+    const categories = await listCategories(req.scope!.householdId);
     res.json({ categories });
   })
 );
@@ -44,7 +44,7 @@ categoriesRouter.get(
 categoriesRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const category = await getCategoryById(req.userId!, req.params.id);
+    const category = await getCategoryById(req.scope!.householdId, req.params.id);
     if (!category) {
       throw new CategoryNotFoundError();
     }
@@ -55,14 +55,17 @@ categoriesRouter.get(
 categoriesRouter.post(
   "/",
   asyncHandler(async (req, res) => {
-    const category = await createCategory(req.userId!, createCategorySchema.parse(req.body));
+    const category = await createCategory(
+      req.scope!.householdId,
+      createCategorySchema.parse(req.body)
+    );
     res.status(201).json({ category });
   })
 );
 
 const updateHandler = asyncHandler(async (req, res) => {
   const category = await updateCategory(
-    req.userId!,
+    req.scope!.householdId,
     req.params.id,
     updateCategorySchema.parse(req.body)
   );
@@ -75,7 +78,7 @@ categoriesRouter.put("/:id", updateHandler);
 categoriesRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deleteCategory(req.userId!, req.params.id);
+    await deleteCategory(req.scope!.householdId, req.params.id);
     res.json({ success: true });
   })
 );
