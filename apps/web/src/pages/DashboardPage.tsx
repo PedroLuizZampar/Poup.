@@ -19,8 +19,9 @@ import {
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  RefreshIcon,
 } from "../components/icons/Icons";
+import { backfillContas, resumoDoBackfill } from "../lib/backfill";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 import { CardSkeleton, TableRowSkeleton } from "../components/common/Skeleton";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -32,11 +33,12 @@ import { MonthSummaryPanel } from "../components/dashboard/MonthSummaryPanel";
 import { useToast } from "../components/ui/Toast";
 import { useCategories } from "../hooks/useCategories";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
+import { SyncButton } from "../components/sync/SyncButton";
 import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
 import { useMonthNavigation } from "../hooks/useMonthNavigation";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { summarizeAccounts } from "../lib/accounts";
-import { formatCurrency, formatDate } from "../lib/format";
+import { contagem, formatCurrency, formatDate } from "../lib/format";
 import { formatMonthShort } from "../lib/date";
 import { Money } from "../components/ui/Money";
 
@@ -57,8 +59,13 @@ export function DashboardPage() {
   const [goals, setGoals] = useState<GoalDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  /** Progresso da busca do extrato completo, contada por conta. */
+  const [backfilling, setBackfilling] = useState<{ atual: number; total: number } | null>(
+    null
+  );
 
   const toast = useToast();
+  const confirm = useConfirm();
 
   /**
    * Os totais vêm somados do banco (`/reports/summary`). O painel baixava três
@@ -113,6 +120,52 @@ export function DashboardPage() {
     } finally {
       setSyncing(false);
     }
+  }
+
+  /**
+   * Busca o extrato inteiro de todas as contas conectadas, desde o começo.
+   *
+   * O laço mora no cliente porque o servidor corta por conta: é aqui que dá
+   * para dizer em qual delas está. O aviso antes não é formalidade — numa conta
+   * antiga a requisição estoura, e quem clicou precisa ler o erro como "não
+   * coube", não como "quebrou".
+   */
+  async function handleBackfillAll() {
+    const contas = accounts.filter((a) => a.pluggyAccountId);
+    if (contas.length === 0) {
+      toast.error("Não há contas conectadas para sincronizar.");
+      return;
+    }
+
+    const ok = await confirm({
+      title: "Buscar todo o período",
+      message:
+        "Vamos buscar na Pluggy todo o extrato de todas as conexões, desde o começo, " +
+        `passando por ${contagem(contas.length, "conta", "contas")}. ` +
+        "Dependendo de quantas transações houver, isso pode demorar vários minutos e " +
+        "falhar por tempo esgotado — nesse caso nada se perde, e tentar de novo continua " +
+        "de onde parou. O que for importado entra na fila de revisão.",
+      confirmText: "Buscar tudo",
+    });
+    if (!ok) return;
+
+    let totais;
+    try {
+      totais = await backfillContas(
+        contas.map((c) => c.id),
+        (progresso) => setBackfilling(progresso)
+      );
+    } finally {
+      setBackfilling(null);
+    }
+
+    const resumo = resumoDoBackfill(totais);
+    if (resumo.ok) toast.success(resumo.texto);
+    else toast.error(resumo.texto);
+
+    await checkNotifications().catch(() => undefined);
+    notifySuggestionsChanged();
+    await loadDashboard();
   }
 
   useEffect(() => {
@@ -187,17 +240,15 @@ export function DashboardPage() {
 
         <div className="flex flex-wrap items-center justify-end gap-3 min-w-0">
           <SuggestionsButton />
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={handleSyncAccounts}
-            loading={syncing}
-            iconLeft={<RefreshIcon className="w-4 h-4 text-primary" />}
-            title="Buscar movimentações novas"
+          <SyncButton
+            onIncremental={handleSyncAccounts}
+            onFull={handleBackfillAll}
+            loading={syncing || backfilling !== null}
+            loadingLabel={
+              backfilling ? `Conta ${backfilling.atual} de ${backfilling.total}` : undefined
+            }
             className="flex-1 md:flex-none"
-          >
-            Sincronizar
-          </Button>
+          />
           <Link to="/transacoes" className="flex-1 md:flex-none">
             <Button variant="primary" size="md" fullWidth className="md:w-auto">
               Ver transações

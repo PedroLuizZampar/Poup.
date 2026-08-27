@@ -8,12 +8,11 @@ import {
   syncItem,
   deleteItem,
   updateAccount,
-  backfillAccount,
   clearToken,
 } from "../lib/api";
+import { backfillContas, resumoDoBackfill } from "../lib/backfill";
 import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
 import {
-  RefreshIcon,
   TrashIcon,
   EditIcon,
   KeyIcon,
@@ -43,10 +42,17 @@ import { EditAccountModal } from "../components/profile/EditAccountModal";
 import { EditInstitutionImageModal } from "../components/profile/EditInstitutionImageModal";
 import { PluggyCredentialsModal } from "../components/profile/PluggyCredentialsModal";
 import { AddConnectionModal } from "../components/profile/AddConnectionModal";
+import { SyncButton } from "../components/sync/SyncButton";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { contagem, formatDateTime } from "../lib/format";
 import { ACCOUNT_TYPE_LABELS } from "../lib/accounts";
+
+/** Hover de ação destrutiva num botão secundário. Igual ao de excluir
+ *  categoria: o vermelho fica no texto e no fundo, e a borda não muda — tingir
+ *  a borda também deixava estes dois botões fora do padrão do resto do app. */
+const HOVER_DESTRUTIVO =
+  "hover:!bg-error-soft hover:!text-error hover:!border-border";
 
 export function ProfilePage({
   user,
@@ -67,7 +73,8 @@ export function ProfilePage({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountDTO | null>(null);
-  /** Conexão cujo histórico completo está sendo buscado, e o progresso. */
+  /** Conexão cujo histórico completo está sendo buscado, e o progresso.
+   *  `itemId` é "ALL" quando a busca cobre todas as conexões de uma vez. */
   const [backfilling, setBackfilling] = useState<{
     itemId: string;
     atual: number;
@@ -177,27 +184,26 @@ export function ProfilePage({
   }
 
   /**
-   * Busca o extrato inteiro de uma conexão, desde o começo.
-   *
-   * O laço é do cliente de propósito: o servidor corta por conta porque o
-   * extrato completo não tem tamanho conhecido e cada requisição precisa caber
-   * no tempo de uma função. É aqui que dá para mostrar em qual delas está.
+   * Busca o extrato inteiro das contas informadas, desde o começo.
    *
    * O aviso antes não é formalidade: numa conta antiga a requisição estoura — e
    * quem clicou precisa saber disso antes, para ler o erro como "não coube" e
    * não como "quebrou".
    */
-  async function handleBackfillItem(item: ItemDTO) {
-    const contas = accounts.filter((a) => a.itemId === item.id && a.pluggyAccountId);
+  async function executarBackfill(
+    chave: string,
+    escopo: string,
+    contas: AccountDTO[]
+  ) {
     if (contas.length === 0) {
-      toast.error("Esta conexão não tem contas importadas para sincronizar.");
+      toast.error("Não há contas importadas para sincronizar.");
       return;
     }
 
     const ok = await confirm({
-      title: "Sincronizar período completo",
+      title: "Buscar todo o período",
       message:
-        `Vamos buscar na Pluggy todo o extrato de ${item.institutionName}, desde o começo, ` +
+        `Vamos buscar na Pluggy todo o extrato ${escopo}, desde o começo, ` +
         `passando por ${contagem(contas.length, "conta", "contas")}. ` +
         "Dependendo de quantas transações houver, isso pode demorar vários minutos e " +
         "falhar por tempo esgotado — nesse caso nada se perde, e tentar de novo continua " +
@@ -206,45 +212,38 @@ export function ProfilePage({
     });
     if (!ok) return;
 
-    let criadas = 0;
-    let atualizadas = 0;
-    let falhas = 0;
-
+    let totais;
     try {
-      for (let i = 0; i < contas.length; i++) {
-        setBackfilling({ itemId: item.id, atual: i + 1, total: contas.length });
-        try {
-          const res = await backfillAccount(contas[i].id);
-          criadas += res.created;
-          atualizadas += res.updated;
-        } catch (err: any) {
-          // Uma conta que falha não interrompe as outras: a busca é idempotente,
-          // e trazer três de quatro é melhor que nenhuma.
-          console.warn(`Falha ao buscar o histórico da conta ${contas[i].id}:`, err?.message || err);
-          falhas++;
-        }
-      }
+      totais = await backfillContas(
+        contas.map((c) => c.id),
+        ({ atual, total }) => setBackfilling({ itemId: chave, atual, total })
+      );
     } finally {
       setBackfilling(null);
     }
 
-    if (falhas > 0) {
-      toast.error(
-        `${contagem(criadas, "transação importada", "transações importadas")}, mas ` +
-          `${contagem(falhas, "conta falhou", "contas falharam")} por tempo esgotado. ` +
-          "Tente de novo para continuar de onde parou."
-      );
-    } else if (criadas === 0 && atualizadas === 0) {
-      toast.success("Nada novo: o histórico desta conexão já está completo.");
-    } else {
-      toast.success(
-        `${contagem(criadas, "transação importada", "transações importadas")} e ` +
-          `${contagem(atualizadas, "atualizada", "atualizadas")}.`
-      );
-    }
+    const resumo = resumoDoBackfill(totais);
+    if (resumo.ok) toast.success(resumo.texto);
+    else toast.error(resumo.texto);
 
     notifySuggestionsChanged();
     await loadData();
+  }
+
+  function handleBackfillItem(item: ItemDTO) {
+    return executarBackfill(
+      item.id,
+      `de ${item.institutionName}`,
+      accounts.filter((a) => a.itemId === item.id && a.pluggyAccountId)
+    );
+  }
+
+  function handleBackfillAll() {
+    return executarBackfill(
+      "ALL",
+      "de todas as conexões",
+      accounts.filter((a) => a.pluggyAccountId)
+    );
   }
 
   const hasCredentials = Boolean(credentials?.clientId && credentials.hasSecret);
@@ -292,7 +291,7 @@ export function ProfilePage({
               clearToken();
               onLoggedOut();
             }}
-            className="hover:text-error"
+            className={HOVER_DESTRUTIVO}
           >
             Encerrar sessão
           </Button>
@@ -485,16 +484,20 @@ export function ProfilePage({
             >
               Adicionar conexão
             </Button>
-            <Button
-              variant="primary"
+            <SyncButton
               size="sm"
-              onClick={handleSyncAll}
-              loading={syncingId === "ALL"}
-              disabled={items.length === 0}
-              iconLeft={<RefreshIcon className="w-3.5 h-3.5" />}
-            >
-              Sincronizar todas as contas
-            </Button>
+              label="Sincronizar todas as contas"
+              title="Buscar movimentações de todas as conexões"
+              onIncremental={handleSyncAll}
+              onFull={handleBackfillAll}
+              loading={syncingId === "ALL" || backfilling?.itemId === "ALL"}
+              loadingLabel={
+                backfilling?.itemId === "ALL"
+                  ? `Conta ${backfilling.atual} de ${backfilling.total}`
+                  : undefined
+              }
+              disabled={items.length === 0 || backfilling !== null}
+            />
           </div>
         </div>
 
@@ -584,39 +587,36 @@ export function ProfilePage({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleSyncItem(item.pluggyItemId)}
-                        loading={syncingId === item.pluggyItemId}
-                        iconLeft={<RefreshIcon className="w-3.5 h-3.5" />}
-                      >
-                        {item.hasPendingSync ? "Sincronizar •" : "Sincronizar"}
-                      </Button>
                       {/* O sync comum só revisita trinta dias, e uma conexão
-                          nova nasce sabendo só o mês em que foi criada. Este é
-                          o caminho para o resto. O corte por conta é do
-                          servidor — o laço com o progresso mora no cliente. */}
-                      <Button
-                        variant="secondary"
+                          nova nasce sabendo só o mês em que foi criada. O menu
+                          é o caminho para o resto, sem um segundo botão largo
+                          disputando a linha. */}
+                      <SyncButton
                         size="sm"
-                        onClick={() => handleBackfillItem(item)}
-                        loading={backfilling?.itemId === item.id}
+                        label={item.hasPendingSync ? "Sincronizar •" : "Sincronizar"}
+                        title={`Buscar movimentações de ${item.institutionName}`}
+                        onIncremental={() => handleSyncItem(item.pluggyItemId)}
+                        onFull={() => handleBackfillItem(item)}
+                        loading={
+                          syncingId === item.pluggyItemId || backfilling?.itemId === item.id
+                        }
+                        loadingLabel={
+                          backfilling?.itemId === item.id
+                            ? `Conta ${backfilling.atual} de ${backfilling.total}`
+                            : undefined
+                        }
                         disabled={backfilling !== null}
-                        title="Buscar todo o extrato desta conexão, desde o começo"
-                      >
-                        {backfilling?.itemId === item.id
-                          ? `Conta ${backfilling.atual} de ${backfilling.total}`
-                          : "Sincronizar período completo"}
-                      </Button>
+                      />
                       {/* O ícone herda a cor do botão (`currentColor`) em vez de
                           ter hover próprio: assim o botão inteiro é um único
-                          alvo de hover, e não dois que acendem separados. */}
+                          alvo de hover, e não dois que acendem separados. O
+                          hover é o mesmo de excluir categoria — vermelho no
+                          texto e no fundo, borda intacta. */}
                       <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => handleDeleteItem(item)}
-                        className="hover:!bg-error-soft hover:!text-error hover:!border-error/40"
+                        className={HOVER_DESTRUTIVO}
                         title="Desconectar instituição"
                         aria-label="Desconectar instituição"
                       >

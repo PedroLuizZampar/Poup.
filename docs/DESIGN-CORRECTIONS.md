@@ -452,7 +452,13 @@ Shell único para os 5 modais atuais (orçamento, meta, assinatura, categoria, d
 - Overlay `bg-black/50 backdrop-blur-sm`, `fade-in` em `--dur-base`
 - Painel `rounded-modal`, `shadow-sh3`, entrada `scale-in` (0.97 → 1) + `fade-in`
 - **Focus trap** e devolução do foco ao gatilho ao fechar
-- Fecha em `Esc` e em clique no overlay — nenhum dos 5 modais faz isso hoje
+- Fecha em `Esc` — nenhum dos 5 modais faz isso hoje
+
+> **Revisto depois da implementação.** O plano original também fechava no clique
+> no overlay. Na prática todos os modais deste app são formulários, e o clique
+> errado ao lado da caixa jogava fora o preenchimento inteiro. `Modal` passou a
+> nascer com `closeOnOverlayClick={false}`; a prop continua existindo para quem
+> quiser o comportamento antigo. Saída fica pelo X e pelo `Esc`.
 - `role="dialog" aria-modal="true" aria-labelledby`
 - `overflow: hidden` no `body` enquanto aberto
 - Slots `header` / `body` / `footer`; footer com ações alinhadas à direita, primária por último
@@ -976,7 +982,7 @@ Este item é o que devolve ao app o visual do protótipo.
 ### 5.10 `TransactionDetailModal.tsx`
 
 - **Corrigir violação das Rules of Hooks** (ver 6.1)
-- Migrar para `<Modal>` — ganha `Esc`, clique no overlay, focus trap
+- Migrar para `<Modal>` — ganha `Esc` e focus trap
 - Seleção de categoria: botões com tile + cor real; o selecionado usa a cor da própria categoria
 - Lista de categorias com `max-h-36 overflow-y-auto` sem indicação de rolagem → máscara de gradiente na borda inferior
 - `Tipo de Movimentação` → `Tipo`; `Receita (Entrada)` → `Receita`
@@ -1131,7 +1137,9 @@ Rodar ao fim da etapa 7, nos dois temas, em 1280px e 1600px (o app é desktop; l
 - [ ] Os 18 `alert()`/`confirm()` substituídos
 - [ ] Todo controle interativo com `.focus-ring` visível
 - [ ] `Tab` percorre a página inteira sem foco invisível
-- [ ] Todo modal fecha com `Esc` e clique no overlay, com foco preso e devolvido
+- [ ] Todo modal fecha com `Esc`, com foco preso e devolvido
+- [ ] Nenhum modal fecha em clique no overlay (ver 1.3) — o clique errado ao
+      lado de um formulário não pode custar o preenchimento
 - [ ] Todo input com `<label htmlFor>`
 
 **Categorias**

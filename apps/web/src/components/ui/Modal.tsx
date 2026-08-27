@@ -15,6 +15,8 @@ export interface ModalProps {
   children: ReactNode;
   footer?: ReactNode;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
+  /** Fechar no toque fora vem desligado: nestes diálogos o clique errado
+   *  perdia um formulário inteiro preenchido. Sai pelo X ou pelo Esc. */
   closeOnOverlayClick?: boolean;
   closeOnEsc?: boolean;
   showCloseButton?: boolean;
@@ -28,7 +30,7 @@ export function Modal({
   children,
   footer,
   maxWidth = "lg",
-  closeOnOverlayClick = true,
+  closeOnOverlayClick = false,
   closeOnEsc = true,
   showCloseButton = true,
 }: ModalProps) {
@@ -136,7 +138,7 @@ export function Modal({
         className={`w-full ${maxWidthClass} max-h-[85dvh] sm:max-h-[90dvh] rounded-t-modal sm:rounded-modal bg-surface text-text-primary shadow-sh3 border border-border border-b-0 sm:border-b px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:p-6 md:p-8 flex flex-col gap-4 sm:gap-6 anim-fade-up sm:anim-scale-in`}
       >
         {/* Puxador. Só desenho: sinaliza "isto é uma folha que sobe do rodapé" —
-            fechar continua sendo pelo X, pelo Esc e pelo toque fora. */}
+            fechar continua sendo pelo X e pelo Esc. */}
         <div
           aria-hidden="true"
           className="sm:hidden mx-auto w-10 h-1 rounded-full bg-border-strong shrink-0"
