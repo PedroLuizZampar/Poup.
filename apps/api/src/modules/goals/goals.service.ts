@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma";
 import { Prisma } from "@prisma/client";
 import type { GoalDTO } from "@poup/shared";
+import type { Scope } from "../../lib/scope";
 import { resolveAccountName } from "../accounts/accounts.service";
 import { AccountNotFoundError, GoalNotFoundError } from "../../lib/errors";
 
@@ -27,6 +28,8 @@ type GoalWithAccount = {
   targetAmount: Prisma.Decimal;
   targetDate: Date | null;
   createdAt: Date;
+  /** Quem criou a meta — é o que a dissolução usa para decidir com quem ela fica. */
+  createdByUserId: string;
   account: { name: string; customName: string | null; balance: Prisma.Decimal } | null;
 };
 
@@ -76,16 +79,21 @@ const goalInclude = {
   account: { select: { name: true, customName: true, balance: true } },
 } as const;
 
-async function assertAccountBelongsToUser(userId: string, accountId: string) {
-  const account = await prisma.account.findFirst({ where: { id: accountId, userId } });
+// A conta pode ser do parceiro: amarrar a meta à conta dele é o caso de uso do
+// espaço conjunto, não uma exceção. Por isso o filtro é por membro do espaço,
+// não pelo dono do escopo.
+async function assertAccountNoEspaco(scope: Scope, accountId: string) {
+  const account = await prisma.account.findFirst({
+    where: { id: accountId, userId: { in: scope.memberIds } },
+  });
   if (!account) {
     throw new AccountNotFoundError();
   }
 }
 
-export async function listGoals(userId: string): Promise<GoalDTO[]> {
+export async function listGoals(scope: Scope): Promise<GoalDTO[]> {
   const goals = await prisma.goal.findMany({
-    where: { userId },
+    where: { householdId: scope.householdId },
     include: goalInclude,
     orderBy: { createdAt: "asc" },
   });
@@ -93,9 +101,9 @@ export async function listGoals(userId: string): Promise<GoalDTO[]> {
   return goals.map(formatGoalDTO);
 }
 
-export async function getGoalById(userId: string, id: string): Promise<GoalDTO | null> {
+export async function getGoalById(scope: Scope, id: string): Promise<GoalDTO | null> {
   const goal = await prisma.goal.findFirst({
-    where: { id, userId },
+    where: { id, householdId: scope.householdId },
     include: goalInclude,
   });
 
@@ -103,12 +111,16 @@ export async function getGoalById(userId: string, id: string): Promise<GoalDTO |
   return formatGoalDTO(goal);
 }
 
-export async function createGoal(userId: string, input: CreateGoalInput): Promise<GoalDTO> {
-  await assertAccountBelongsToUser(userId, input.accountId);
+export async function createGoal(scope: Scope, input: CreateGoalInput): Promise<GoalDTO> {
+  await assertAccountNoEspaco(scope, input.accountId);
 
   const created = await prisma.goal.create({
     data: {
-      userId,
+      householdId: scope.householdId,
+      // Guardado para a dissolução (Task 15) saber com quem a meta fica —
+      // accountId não serve porque é opcional e uma meta sem conta não teria
+      // destino.
+      createdByUserId: scope.userId,
       accountId: input.accountId,
       name: input.name.trim(),
       targetAmount: new Prisma.Decimal(input.targetAmount),
@@ -120,16 +132,16 @@ export async function createGoal(userId: string, input: CreateGoalInput): Promis
   return formatGoalDTO(created);
 }
 
-export async function updateGoal(userId: string, id: string, input: UpdateGoalInput): Promise<GoalDTO> {
+export async function updateGoal(scope: Scope, id: string, input: UpdateGoalInput): Promise<GoalDTO> {
   const existing = await prisma.goal.findFirst({
-    where: { id, userId },
+    where: { id, householdId: scope.householdId },
   });
   if (!existing) {
     throw new GoalNotFoundError();
   }
 
   if (input.accountId !== undefined) {
-    await assertAccountBelongsToUser(userId, input.accountId);
+    await assertAccountNoEspaco(scope, input.accountId);
   }
 
   const updated = await prisma.goal.update({
@@ -146,9 +158,9 @@ export async function updateGoal(userId: string, id: string, input: UpdateGoalIn
   return formatGoalDTO(updated);
 }
 
-export async function deleteGoal(userId: string, id: string): Promise<{ success: true }> {
+export async function deleteGoal(scope: Scope, id: string): Promise<{ success: true }> {
   const existing = await prisma.goal.findFirst({
-    where: { id, userId },
+    where: { id, householdId: scope.householdId },
   });
   if (!existing) {
     throw new GoalNotFoundError();

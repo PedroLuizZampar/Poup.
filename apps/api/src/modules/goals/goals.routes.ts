@@ -28,7 +28,7 @@ const updateGoalSchema = z.object({
 goalsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const goals = await listGoals(req.userId!);
+    const goals = await listGoals(req.scope!);
     res.json({ goals });
   })
 );
@@ -36,7 +36,7 @@ goalsRouter.get(
 goalsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const goal = await getGoalById(req.userId!, req.params.id);
+    const goal = await getGoalById(req.scope!, req.params.id);
     if (!goal) {
       throw new GoalNotFoundError();
     }
@@ -47,7 +47,7 @@ goalsRouter.get(
 goalsRouter.post(
   "/",
   asyncHandler(async (req, res) => {
-    const goal = await createGoal(req.userId!, createGoalSchema.parse(req.body));
+    const goal = await createGoal(req.scope!, createGoalSchema.parse(req.body));
     res.status(201).json({ goal });
   })
 );
@@ -55,7 +55,7 @@ goalsRouter.post(
 goalsRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
-    const goal = await updateGoal(req.userId!, req.params.id, updateGoalSchema.parse(req.body));
+    const goal = await updateGoal(req.scope!, req.params.id, updateGoalSchema.parse(req.body));
     res.json({ goal });
   })
 );
@@ -63,7 +63,7 @@ goalsRouter.patch(
 goalsRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deleteGoal(req.userId!, req.params.id);
+    await deleteGoal(req.scope!, req.params.id);
     res.json({ success: true });
   })
 );
