@@ -11,15 +11,32 @@ import { Prisma } from "@prisma/client";
  * Como a fusao, roda dentro de um `$transaction` do chamador. E a ordem das
  * escritas nao e livre:
  *
- * - as categorias originais morrem na cascata de `Household`, e
- *   `Transaction.categoryId` e as duas colunas de `CategorySuggestion` sao
- *   `ON DELETE SET NULL` — religar depois da exclusao nao daria erro nenhum, so
- *   esvaziaria a categorizacao de todo mundo em silencio. Por isso tudo e
- *   religado antes do `household.delete`;
+ * - as categorias originais morrem na cascata de `Household`, e o que aponta
+ *   para elas nao sobrevive junto. `Transaction.categoryId` e
+ *   `CategorySuggestion.categoryId` sao `ON DELETE SET NULL`: religar depois da
+ *   exclusao nao daria erro nenhum, so esvaziaria a categorizacao em silencio.
+ *   `CategorySuggestion.resolvedCategoryId` e pior — e um `String?` cru, **sem
+ *   relacao e sem chave estrangeira nenhuma** (por isso `Category` tem uma
+ *   back-relation so). Ali o banco nao anula nada: sobraria um id apontando para
+ *   linha que nao existe mais, que ninguem sinaliza. Nada alem deste codigo
+ *   protege essa coluna, e e por isso que tudo e religado antes do
+ *   `household.delete`;
  * - `Budget.category` e `onDelete: Cascade`, entao os tetos sao copiados
  *   enquanto as originais ainda existem, e a copia aponta para a copia;
  * - `User.household` nao tem `onDelete`, ou seja, e Restrict: todo mundo muda de
  *   espaco antes de o antigo ser apagado, senao a transacao inteira volta atras.
+ *
+ * A ordem das **leituras** tambem nao e livre, e por um motivo menos obvio:
+ * `user.findMany` vem antes de `category.findMany` de proposito. Um
+ * `acceptInvite` concorrente pode commitar entre as duas — nada impede um casal
+ * de convidar uma terceira pessoa, porque o convite so checa o tamanho do espaco
+ * de quem *recebe*. Nesta ordem, um aceite depois da leitura dos membros deixa o
+ * novo membro apontando para o espaco antigo, e o Restrict de `User.household`
+ * derruba a transacao inteira no `delete` — o desfecho certo. Invertidas, os
+ * membros incluiriam o recem-chegado (Restrict nao dispara, o delete passa) e as
+ * categorias seriam as de antes da fusao: as dele morreriam na cascata, com as
+ * transacoes e sugestoes zeradas em silencio. E exatamente o estrago que esta
+ * funcao existe para evitar.
  *
  * O laco por categoria e por membro nao e distracao: cada copia so ganha id
  * depois de criada, e e esse id que as religacoes daquele membro usam.

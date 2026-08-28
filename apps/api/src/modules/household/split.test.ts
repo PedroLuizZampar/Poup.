@@ -191,11 +191,14 @@ describe("dissolução do espaço", () => {
   /**
    * O risco número um da dissolução, e o único que nenhum outro teste pega.
    *
-   * As categorias originais morrem na cascata de `Household`, e
-   * `Transaction.categoryId` e as duas colunas de `CategorySuggestion` são
-   * `ON DELETE SET NULL`: apagar o espaço antes de religar não dá erro nenhum —
-   * só esvazia a categorização de todo mundo, sem registro do que era. E
-   * `User.household` é Restrict, então ninguém pode ter ficado para trás.
+   * As categorias originais morrem na cascata de `Household`, e o que aponta
+   * para elas não sobrevive junto. `Transaction.categoryId` e
+   * `CategorySuggestion.categoryId` são `ON DELETE SET NULL`: apagar o espaço
+   * antes de religar não dá erro nenhum, só esvazia a categorização sem registro
+   * do que era. `CategorySuggestion.resolvedCategoryId` não tem relação nem
+   * chave estrangeira nenhuma — ali não sobra nulo, sobra um id apontando para
+   * linha excluída, que o banco nunca vai acusar. E `User.household` é Restrict,
+   * então ninguém pode ter ficado para trás.
    *
    * Subir o `household.delete` para o começo passa em todos os outros testes
    * deste arquivo. Só esta asserção falha.
@@ -206,6 +209,20 @@ describe("dissolução do espaço", () => {
     ]);
 
     await splitHousehold(tx(), "casa-1");
+
+    /**
+     * A ordem das leituras é tão carregada quanto a das escritas. Um
+     * `acceptInvite` concorrente pode commitar entre as duas — o convite só
+     * checa o tamanho do espaço de quem recebe, então um casal pode convidar uma
+     * terceira pessoa. Lendo os membros primeiro, o recém-chegado fica apontando
+     * para o espaço antigo e o Restrict de `User.household` derruba a transação
+     * no `delete`. Invertidas, os membros já o incluem (Restrict não dispara) e
+     * as categorias são as de antes da fusão: as dele morrem na cascata, e as
+     * transações e sugestões dele são zeradas em silêncio.
+     */
+    expect(userFindMany.mock.invocationCallOrder[0]).toBeLessThan(
+      categoryFindMany.mock.invocationCallOrder[0]
+    );
 
     expect(householdDelete).toHaveBeenCalledTimes(1);
     const exclusao = householdDelete.mock.invocationCallOrder[0];
