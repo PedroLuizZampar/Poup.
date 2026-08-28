@@ -59,22 +59,60 @@ export interface AuthTokenPayload {
 
 const MIN_PASSWORD_LENGTH = 8;
 
-function toUserDTO(user: {
+async function toUserDTO(user: {
   id: string;
   email: string;
   name: string;
   avatarUrl: string | null;
-}): UserDTO {
+  householdId: string;
+}): Promise<UserDTO> {
+  const household = await prisma.household.findUniqueOrThrow({
+    where: { id: user.householdId },
+    include: {
+      members: { select: { id: true, name: true, avatarUrl: true } },
+      invites: { include: { inviter: { select: { id: true, name: true, avatarUrl: true } } } },
+    },
+  });
+
+  const invitesReceived = household.invites.filter(
+    (inv) => inv.inviteeId === user.id && inv.status === "PENDING"
+  );
+
+  const invitesSent = household.invites.filter(
+    (inv) => inv.householdId === household.id && inv.status === "PENDING" && inv.inviterId !== user.id
+  );
+
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     avatarUrl: user.avatarUrl,
+    household: {
+      id: household.id,
+      members: household.members,
+      invitesReceived: invitesReceived.map((inv) => ({
+        id: inv.id,
+        status: inv.status,
+        inviter: inv.inviter,
+        inviteeEmail: inv.inviteeEmail,
+        createdAt: inv.createdAt.toISOString(),
+      })),
+      invitesSent: invitesSent.map((inv) => ({
+        id: inv.id,
+        status: inv.status,
+        inviter: inv.inviter,
+        inviteeEmail: inv.inviteeEmail,
+        createdAt: inv.createdAt.toISOString(),
+      })),
+    },
   };
 }
 
 export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, name: true, avatarUrl: true, passwordHash: true, householdId: true }
+  });
   if (!user) {
     throw new InvalidCredentialsError();
   }
@@ -91,7 +129,7 @@ export async function login(email: string, password: string) {
 
   return {
     token,
-    user: toUserDTO(user),
+    user: await toUserDTO(user),
   };
 }
 
@@ -169,16 +207,22 @@ export async function register(input: RegisterInput) {
   };
   const token = jwt.sign({ userId: user.id } satisfies AuthTokenPayload, env.JWT_SECRET, signOptions);
 
-  return { token, user: toUserDTO(user) };
+  // Buscar os dados completos do usuário com avatar URL após criação
+  const fullUser = await prisma.user.findUniqueOrThrow({
+    where: { id: user.id },
+    select: { id: true, email: true, name: true, avatarUrl: true, householdId: true }
+  });
+
+  return { token, user: await toUserDTO(fullUser) };
 }
 
 export async function getUserById(userId: string): Promise<UserDTO | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, avatarUrl: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, householdId: true },
   });
 
-  return user ? toUserDTO(user) : null;
+  return user ? await toUserDTO(user) : null;
 }
 
 export interface UpdateProfileInput {
@@ -221,10 +265,10 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
       ...(emailChanged && { email: nextEmail }),
       ...(input.avatarUrl !== undefined && { avatarUrl: validateImageDataUrl(input.avatarUrl) }),
     },
-    select: { id: true, email: true, name: true, avatarUrl: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, householdId: true },
   });
 
-  return toUserDTO(updated);
+  return await toUserDTO(updated);
 }
 
 /** O secret nunca sai da API: o app só precisa saber se existe um cadastrado. */

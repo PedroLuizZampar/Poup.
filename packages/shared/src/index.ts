@@ -271,11 +271,44 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export type HouseholdInviteStatus = "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
+
+export interface HouseholdMemberDTO {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface HouseholdInviteDTO {
+  id: string;
+  status: HouseholdInviteStatus;
+  /** Quem convidou. */
+  inviter: HouseholdMemberDTO;
+  /** Para quem foi. `name` e `avatarUrl` são nulos quando quem lê é o convidado. */
+  inviteeEmail: string;
+  createdAt: string;
+}
+
+export interface HouseholdStateDTO {
+  id: string;
+  members: HouseholdMemberDTO[];
+  /** Convites que **eu** recebi e ainda não respondi. */
+  invitesReceived: HouseholdInviteDTO[];
+  /** Convites que o meu espaço enviou e ainda não foram respondidos. */
+  invitesSent: HouseholdInviteDTO[];
+}
+
 export interface UserDTO {
   id: string;
   email: string;
   name: string;
   avatarUrl: string | null;
+  /**
+   * O espaço vem junto do usuário para que o `App` o tenha desde o login, e
+   * nenhuma tela precise de uma requisição própria só para saber se deve
+   * desenhar o filtro por pessoa.
+   */
+  household: HouseholdStateDTO;
 }
 
 export interface NotificationDTO {
