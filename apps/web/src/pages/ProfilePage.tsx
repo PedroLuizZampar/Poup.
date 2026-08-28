@@ -5,6 +5,7 @@ import {
   fetchItems,
   fetchAccounts,
   fetchPluggyCredentials,
+  fetchMe,
   syncItem,
   deleteItem,
   updateAccount,
@@ -42,6 +43,7 @@ import { EditAccountModal } from "../components/profile/EditAccountModal";
 import { EditInstitutionImageModal } from "../components/profile/EditInstitutionImageModal";
 import { PluggyCredentialsModal } from "../components/profile/PluggyCredentialsModal";
 import { AddConnectionModal } from "../components/profile/AddConnectionModal";
+import { ContaConjuntaSection } from "../components/profile/ContaConjuntaSection";
 import { SyncButton } from "../components/sync/SyncButton";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
@@ -246,6 +248,18 @@ export function ProfilePage({
     );
   }
 
+  /** Como a conta conjunta mantém `user.household` atual depois de convidar,
+   *  recusar, cancelar ou (Task 14/15) aceitar e sair: refaz o `/auth/me`. Erro
+   *  aqui não desfaz a ação que já deu certo, só fica sem atualizar a tela. */
+  async function recarregarUsuario() {
+    try {
+      const atualizado = await fetchMe();
+      if (atualizado) onUserUpdated(atualizado);
+    } catch (err) {
+      console.error("Erro ao atualizar usuário:", err);
+    }
+  }
+
   const hasCredentials = Boolean(credentials?.clientId && credentials.hasSecret);
 
   return (
@@ -297,6 +311,8 @@ export function ProfilePage({
           </Button>
         </div>
       </div>
+
+      <ContaConjuntaSection household={user.household} onChanged={recarregarUsuario} />
 
       {/* Preferências.
           As duas entradas aqui existem porque o mobile não tem onde mais

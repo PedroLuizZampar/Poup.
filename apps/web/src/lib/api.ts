@@ -31,6 +31,8 @@ import type {
   InstallmentsResponse,
   CompensationCandidatesResponse,
   CompensationDetailResponse,
+  HouseholdStateDTO,
+  HouseholdInviteDTO,
 } from "@poup/shared";
 
 /**
@@ -540,4 +542,28 @@ export async function bulkCategorize(
     method: "POST",
     body: JSON.stringify({ transactionIds, categoryId }),
   });
+}
+
+// ==========================================
+// CONTA CONJUNTA
+// ==========================================
+export async function fetchHousehold(): Promise<HouseholdStateDTO> {
+  const res = await request<{ household: HouseholdStateDTO }>("/household");
+  return res.household;
+}
+
+export async function sendHouseholdInvite(email: string): Promise<HouseholdInviteDTO> {
+  const res = await request<{ invite: HouseholdInviteDTO }>("/household/invites", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  return res.invite;
+}
+
+export async function declineHouseholdInvite(id: string): Promise<void> {
+  await request(`/household/invites/${id}/decline`, { method: "POST" });
+}
+
+export async function cancelHouseholdInvite(id: string): Promise<void> {
+  await request(`/household/invites/${id}`, { method: "DELETE" });
 }
