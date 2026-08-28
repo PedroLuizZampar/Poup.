@@ -265,6 +265,56 @@ describe("fusão de espaços", () => {
     expect(somado.equals(new Prisma.Decimal("0.3"))).toBe(true);
   });
 
+  /**
+   * O mesmo perigo do teste acima, na outra ponta: `Transaction.category` e
+   * `CategorySuggestion.category` são `onDelete: SetNull`. Excluir a categoria
+   * absorvida antes de repontar apagaria a categoria de cada transação dela —
+   * sem erro, e sem registro nenhum do que a categoria tinha sido.
+   * `resolvedCategoryId` é pior: não tem chave estrangeira, então ficaria um id
+   * apontando para linha inexistente.
+   */
+  it("repõe tudo o que aponta para a absorvida antes de excluí-la", async () => {
+    categoryFindMany
+      .mockResolvedValueOnce([cat({ id: "d-mercado" })])
+      .mockResolvedValueOnce([cat({ id: "o-mercado", householdId: "origem" })]);
+
+    await mergeHouseholds(tx(), "origem", "destino");
+
+    const exclusao = categoryDelete.mock.invocationCallOrder[0];
+    expect(transactionUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(exclusao);
+    // As duas colunas da sugestão, cada uma no seu próprio `updateMany`.
+    expect(suggestionUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(exclusao);
+    expect(suggestionUpdateMany.mock.invocationCallOrder[1]).toBeLessThan(exclusao);
+  });
+
+  /**
+   * A categoria da origem foi absorvida e só ela tinha teto para aquilo. O
+   * orçamento precisa passar a apontar para o par no destino **antes** de a
+   * absorvida ser excluída: `Budget.category` é `onDelete: Cascade`, e um teto
+   * ainda apontando para ela iria junto, calado.
+   */
+  it("reaponta para o par o teto da categoria absorvida quando o destino não orçava aquilo", async () => {
+    categoryFindMany
+      .mockResolvedValueOnce([cat({ id: "d-mercado" })])
+      .mockResolvedValueOnce([cat({ id: "o-mercado", householdId: "origem" })]);
+    budgetFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: "b-o", categoryId: "o-mercado", monthlyLimit: new Prisma.Decimal(400) },
+      ]);
+
+    await mergeHouseholds(tx(), "origem", "destino");
+
+    expect(budgetUpdate).toHaveBeenCalledWith({
+      where: { id: "b-o" },
+      data: { householdId: "destino", categoryId: "d-mercado" },
+    });
+    expect(budgetUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      categoryDelete.mock.invocationCallOrder[0]
+    );
+    expect(budgetDelete).not.toHaveBeenCalled();
+  });
+
   it("leva o teto da categoria que só mudou de espaço", async () => {
     categoryFindMany
       .mockResolvedValueOnce([])
@@ -345,6 +395,24 @@ describe("fusão de espaços", () => {
    * convites que ela enviou sumiriam de `invitesSent` — ninguém conseguiria
    * cancelá-los — e continuariam pendentes na tela de quem recebeu.
    */
+  /**
+   * Fundir um espaço nele mesmo não é uma fusão vazia: as duas leituras trazem
+   * as mesmas linhas, toda categoria casa consigo, e o laço das absorvidas
+   * excluiria todas elas. Sair antes de ler é a única defesa que não depende de
+   * uma chave estrangeira incidental do chamador.
+   */
+  it("não faz nada quando origem e destino são o mesmo espaço", async () => {
+    await mergeHouseholds(tx(), "casa", "casa");
+
+    expect(categoryFindMany).not.toHaveBeenCalled();
+    expect(categoryDelete).not.toHaveBeenCalled();
+    expect(categoryUpdate).not.toHaveBeenCalled();
+    expect(budgetUpdate).not.toHaveBeenCalled();
+    expect(budgetDelete).not.toHaveBeenCalled();
+    expect(goalUpdateMany).not.toHaveBeenCalled();
+    expect(inviteUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("cancela os convites em aberto do espaço absorvido", async () => {
     categoryFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 

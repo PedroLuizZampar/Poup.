@@ -25,6 +25,14 @@ export async function mergeHouseholds(
   origemId: string,
   destinoId: string
 ): Promise<void> {
+  // Fundir um espaco nele mesmo nao e uma fusao vazia: `destino` e `origem`
+  // trariam as mesmas linhas, toda categoria casaria consigo, e o laco das
+  // absorvidas excluiria todas elas. Hoje nada chega aqui com os dois iguais, e
+  // a transacao nem chegaria a commitar — mas so porque o `household.delete` do
+  // chamador esbarra no Restrict de `User.household`. Nao e uma protecao para
+  // se depender dela.
+  if (origemId === destinoId) return;
+
   // `orderBy` fixo porque a fusao e irreversivel: o sufixo de desempate e a
   // escolha entre dois homonimos nao podem depender da ordem que o banco
   // resolver devolver hoje.
