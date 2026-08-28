@@ -4,24 +4,40 @@ import type { Scope } from "../../lib/scope";
 
 const userFindFirst = vi.fn();
 const userCount = vi.fn();
+const userFindMany = vi.fn();
 const inviteCreate = vi.fn();
+const inviteFindMany = vi.fn();
+const inviteFindFirst = vi.fn();
+const inviteUpdateMany = vi.fn();
 const notificationCreate = vi.fn();
 
 vi.mock("../../prisma", () => ({
   prisma: {
-    user: { findFirst: userFindFirst, count: userCount },
-    householdInvite: { create: inviteCreate },
+    user: { findFirst: userFindFirst, count: userCount, findMany: userFindMany },
+    householdInvite: {
+      create: inviteCreate,
+      findMany: inviteFindMany,
+      findFirst: inviteFindFirst,
+      updateMany: inviteUpdateMany,
+    },
     notification: { create: notificationCreate },
   },
 }));
 
-const { inviteToHousehold } = await import("./household.service");
+const { inviteToHousehold, getHouseholdState, declineInvite, cancelInvite } = await import(
+  "./household.service"
+);
+const { ConviteNaoEncontradoError } = await import("../../lib/errors");
 
 const ana: Scope = { userId: "ana", householdId: "casa-ana", memberIds: ["ana"] };
 
 beforeEach(() => {
   userFindFirst.mockReset();
   userCount.mockReset().mockResolvedValue(1);
+  userFindMany.mockReset().mockResolvedValue([{ id: "ana", name: "Ana", avatarUrl: null }]);
+  inviteFindMany.mockReset().mockResolvedValue([]);
+  inviteFindFirst.mockReset().mockResolvedValue(null);
+  inviteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   inviteCreate.mockReset().mockResolvedValue({
     id: "conv-1",
     status: "PENDING",
@@ -110,6 +126,102 @@ describe("convite para a conta conjunta", () => {
 
     await expect(inviteToHousehold(ana, "bento@exemplo.com")).rejects.toThrow(
       /conexão caiu/
+    );
+  });
+});
+
+describe("estado do espaço", () => {
+  /**
+   * Os dois `where` abaixo já foram escritos errados uma vez e revertidos. Por
+   * isso a asserção é sobre o objeto inteiro, e não `objectContaining`: uma
+   * chave a mais aqui é exatamente o bug que voltaria calado.
+   */
+  it("busca os convites recebidos por convidado, nunca pelo meu espaço", async () => {
+    await getHouseholdState(ana);
+    expect(inviteFindMany.mock.calls[0][0].where).toEqual({
+      inviteeId: "ana",
+      status: "PENDING",
+    });
+    // `householdId` no convite é o espaço de quem convidou; o convidado mora em
+    // outro. Filtrar por ele aqui devolveria sempre lista vazia.
+    expect(inviteFindMany.mock.calls[0][0].where).not.toHaveProperty("householdId");
+  });
+
+  it("busca os convites enviados pelo espaço inteiro, não por quem enviou", async () => {
+    await getHouseholdState(ana);
+    expect(inviteFindMany.mock.calls[1][0].where).toEqual({
+      householdId: "casa-ana",
+      status: "PENDING",
+    });
+    expect(inviteFindMany.mock.calls[1][0].where).not.toHaveProperty("inviterId");
+  });
+
+  it("lista os membros do meu espaço", async () => {
+    const estado = await getHouseholdState(ana);
+    expect(userFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { householdId: "casa-ana" } })
+    );
+    expect(estado).toMatchObject({ id: "casa-ana", members: [{ id: "ana" }] });
+  });
+
+  it("devolve listas vazias para quem está sozinho no espaço", async () => {
+    const estado = await getHouseholdState(ana);
+    expect(estado.invitesReceived).toEqual([]);
+    expect(estado.invitesSent).toEqual([]);
+  });
+});
+
+describe("recusar convite", () => {
+  it("recusa convite que não é meu", async () => {
+    inviteFindFirst.mockResolvedValue(null);
+    await expect(declineInvite(ana, "conv-de-outro")).rejects.toBeInstanceOf(
+      ConviteNaoEncontradoError
+    );
+    expect(inviteFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conv-de-outro", inviteeId: "ana", status: "PENDING" },
+      })
+    );
+    expect(inviteUpdateMany).not.toHaveBeenCalled();
+    expect(notificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("escreve com o status na condição, para o banco decidir a corrida", async () => {
+    inviteFindFirst.mockResolvedValue({ inviterId: "bento", inviteeEmail: "ana@exemplo.com" });
+    await declineInvite(ana, "conv-1");
+    expect(inviteUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conv-1", inviteeId: "ana", status: "PENDING" },
+      })
+    );
+    expect(notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ userId: "bento" }) })
+    );
+  });
+
+  /** Perdeu a corrida para um cancelamento: nada foi recusado, ninguém é avisado. */
+  it("falha sem notificar quando a escrita não casa nenhuma linha", async () => {
+    inviteFindFirst.mockResolvedValue({ inviterId: "bento", inviteeEmail: "ana@exemplo.com" });
+    inviteUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(declineInvite(ana, "conv-1")).rejects.toBeInstanceOf(ConviteNaoEncontradoError);
+    expect(notificationCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("cancelar convite", () => {
+  it("só alcança convite pendente do meu próprio espaço", async () => {
+    await cancelInvite(ana, "conv-1");
+    expect(inviteUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conv-1", householdId: "casa-ana", status: "PENDING" },
+      })
+    );
+  });
+
+  it("falha quando o convite é de outro espaço ou já não está pendente", async () => {
+    inviteUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(cancelInvite(ana, "conv-de-outra-casa")).rejects.toBeInstanceOf(
+      ConviteNaoEncontradoError
     );
   });
 });

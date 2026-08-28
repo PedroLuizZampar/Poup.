@@ -132,18 +132,29 @@ export async function inviteToHousehold(
   return formatInviteDTO(invite);
 }
 
-/** Recusar é do lado de quem recebeu — só o próprio convidado. */
+/**
+ * Recusar é do lado de quem recebeu — só o próprio convidado.
+ *
+ * O `status: "PENDING"` viaja dentro do `updateMany`, e não fica só na leitura
+ * anterior: entre ler e escrever, o outro lado pode ter cancelado. Com o status
+ * no `where` da escrita, quem chega depois casa zero linhas e recebe 404 — em
+ * vez de sobrescrever o CANCELLED e avisar o inviter de uma recusa que não
+ * aconteceu. O `findFirst` continua aqui só para montar a notificação.
+ */
 export async function declineInvite(scope: Scope, inviteId: string) {
   const invite = await prisma.householdInvite.findFirst({
     where: { id: inviteId, inviteeId: scope.userId, status: "PENDING" },
-    include: conviteInclude,
+    select: { inviterId: true, inviteeEmail: true },
   });
   if (!invite) throw new ConviteNaoEncontradoError();
 
-  await prisma.householdInvite.update({
-    where: { id: inviteId },
+  const { count } = await prisma.householdInvite.updateMany({
+    where: { id: inviteId, inviteeId: scope.userId, status: "PENDING" },
     data: { status: "DECLINED", respondedAt: new Date() },
   });
+  // Quem perdeu a corrida não recusou nada, e por isso também não notifica: é o
+  // mesmo `count` que impede a segunda notificação de uma recusa em duplicata.
+  if (count === 0) throw new ConviteNaoEncontradoError();
 
   await prisma.notification.create({
     data: {
@@ -157,17 +168,18 @@ export async function declineInvite(scope: Scope, inviteId: string) {
   return { success: true } as const;
 }
 
-/** Cancelar e do lado de quem enviou — qualquer membro do espaco que enviou. */
+/**
+ * Cancelar e do lado de quem enviou — qualquer membro do espaco que enviou.
+ *
+ * Uma escrita só, condicionada: o espaço e o `PENDING` estão no `where`, então o
+ * banco decide quem vence e não há janela entre ler e escrever.
+ */
 export async function cancelInvite(scope: Scope, inviteId: string) {
-  const invite = await prisma.householdInvite.findFirst({
+  const { count } = await prisma.householdInvite.updateMany({
     where: { id: inviteId, householdId: scope.householdId, status: "PENDING" },
-  });
-  if (!invite) throw new ConviteNaoEncontradoError();
-
-  await prisma.householdInvite.update({
-    where: { id: inviteId },
     data: { status: "CANCELLED", respondedAt: new Date() },
   });
+  if (count === 0) throw new ConviteNaoEncontradoError();
 
   return { success: true } as const;
 }
