@@ -59,51 +59,25 @@ export interface AuthTokenPayload {
 
 const MIN_PASSWORD_LENGTH = 8;
 
-async function toUserDTO(user: {
+function toUserDTO(user: {
   id: string;
   email: string;
   name: string;
   avatarUrl: string | null;
   householdId: string;
-}): Promise<UserDTO> {
-  const household = await prisma.household.findUniqueOrThrow({
-    where: { id: user.householdId },
-    include: {
-      members: { select: { id: true, name: true, avatarUrl: true } },
-      invites: { include: { inviter: { select: { id: true, name: true, avatarUrl: true } } } },
-    },
-  });
-
-  const invitesReceived = household.invites.filter(
-    (inv) => inv.inviteeId === user.id && inv.status === "PENDING"
-  );
-
-  const invitesSent = household.invites.filter(
-    (inv) => inv.householdId === household.id && inv.status === "PENDING" && inv.inviterId !== user.id
-  );
-
+}): UserDTO {
+  // TODO (Task 11): substituir por getHouseholdState(user.householdId).
+  // Por enquanto, estruturalmente válido mas não populado.
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     avatarUrl: user.avatarUrl,
     household: {
-      id: household.id,
-      members: household.members,
-      invitesReceived: invitesReceived.map((inv) => ({
-        id: inv.id,
-        status: inv.status,
-        inviter: inv.inviter,
-        inviteeEmail: inv.inviteeEmail,
-        createdAt: inv.createdAt.toISOString(),
-      })),
-      invitesSent: invitesSent.map((inv) => ({
-        id: inv.id,
-        status: inv.status,
-        inviter: inv.inviter,
-        inviteeEmail: inv.inviteeEmail,
-        createdAt: inv.createdAt.toISOString(),
-      })),
+      id: user.householdId,
+      members: [],
+      invitesReceived: [],
+      invitesSent: [],
     },
   };
 }
@@ -129,7 +103,7 @@ export async function login(email: string, password: string) {
 
   return {
     token,
-    user: await toUserDTO(user),
+    user: toUserDTO(user),
   };
 }
 
@@ -207,13 +181,7 @@ export async function register(input: RegisterInput) {
   };
   const token = jwt.sign({ userId: user.id } satisfies AuthTokenPayload, env.JWT_SECRET, signOptions);
 
-  // Buscar os dados completos do usuário com avatar URL após criação
-  const fullUser = await prisma.user.findUniqueOrThrow({
-    where: { id: user.id },
-    select: { id: true, email: true, name: true, avatarUrl: true, householdId: true }
-  });
-
-  return { token, user: await toUserDTO(fullUser) };
+  return { token, user: toUserDTO(user) };
 }
 
 export async function getUserById(userId: string): Promise<UserDTO | null> {
@@ -222,7 +190,7 @@ export async function getUserById(userId: string): Promise<UserDTO | null> {
     select: { id: true, email: true, name: true, avatarUrl: true, householdId: true },
   });
 
-  return user ? await toUserDTO(user) : null;
+  return user ? toUserDTO(user) : null;
 }
 
 export interface UpdateProfileInput {
@@ -268,7 +236,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     select: { id: true, email: true, name: true, avatarUrl: true, householdId: true },
   });
 
-  return await toUserDTO(updated);
+  return toUserDTO(updated);
 }
 
 /** O secret nunca sai da API: o app só precisa saber se existe um cadastrado. */

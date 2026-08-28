@@ -284,7 +284,7 @@ export interface HouseholdInviteDTO {
   status: HouseholdInviteStatus;
   /** Quem convidou. */
   inviter: HouseholdMemberDTO;
-  /** Para quem foi. `name` e `avatarUrl` são nulos quando quem lê é o convidado. */
+  /** Email do convidado. Armazenado aqui para que a pessoa que convida veja para quem mandou, mesmo se o email mudar depois. */
   inviteeEmail: string;
   createdAt: string;
 }
