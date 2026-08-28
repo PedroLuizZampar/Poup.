@@ -14,6 +14,7 @@ import { notificationsRouter } from "./modules/notifications/notifications.route
 import { accountsRouter } from "./modules/accounts/accounts.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
 import { suggestionsRouter } from "./modules/categorization/suggestions.routes";
+import { householdRouter } from "./modules/household/household.routes";
 import { errorHandler } from "./middleware/errorHandler";
 import { ForbiddenError } from "./lib/errors";
 
@@ -128,6 +129,7 @@ apiRouter.use("/budgets", budgetsRouter);
 apiRouter.use("/goals", goalsRouter);
 apiRouter.use("/notifications", notificationsRouter);
 apiRouter.use("/suggestions", suggestionsRouter);
+apiRouter.use("/household", householdRouter);
 
 apiRouter.get("/health", health);
 

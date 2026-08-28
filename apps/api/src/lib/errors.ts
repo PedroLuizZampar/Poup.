@@ -134,6 +134,19 @@ export class UserNotFoundError extends NotFoundError {
   }
 }
 
+/** Convite que o domínio recusa: e-mail sem conta, a si mesmo, já convidado. */
+export class ConviteInvalidoError extends UnprocessableError {
+  constructor(message: string) {
+    super(message, { field: "email" });
+  }
+}
+
+export class ConviteNaoEncontradoError extends NotFoundError {
+  constructor() {
+    super("Convite não encontrado");
+  }
+}
+
 export class SystemCategoryError extends BadRequestError {
   constructor() {
     super("Esta categoria é mantida pelo Poup e não pode ser editada ou excluída");

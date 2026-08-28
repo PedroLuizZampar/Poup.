@@ -10,6 +10,8 @@ import {
   verifyPluggyCredentials,
 } from "../../lib/pluggy";
 import { createDefaultCategories } from "../../lib/defaultCategories";
+import { resolveScope } from "../../lib/scope";
+import { getHouseholdState } from "../household/household.service";
 import type { PluggyCredentialsDTO, UserDTO } from "@poup/shared";
 import {
   BadRequestError,
@@ -59,26 +61,26 @@ export interface AuthTokenPayload {
 
 const MIN_PASSWORD_LENGTH = 8;
 
-function toUserDTO(user: {
+/**
+ * Assíncrona porque o `household` vem do banco: todo caminho que devolve um
+ * `UserDTO` carrega junto quem está no espaço e os convites em aberto, e é
+ * assim que o app sabe desde o login se deve desenhar o filtro por pessoa.
+ */
+async function toUserDTO(user: {
   id: string;
   email: string;
   name: string;
   avatarUrl: string | null;
   householdId: string;
-}): UserDTO {
-  // TODO (Task 11): substituir por getHouseholdState(user.householdId).
-  // Por enquanto, estruturalmente válido mas não populado.
+}): Promise<UserDTO> {
+  const scope = await resolveScope(user.id);
+
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     avatarUrl: user.avatarUrl,
-    household: {
-      id: user.householdId,
-      members: [],
-      invitesReceived: [],
-      invitesSent: [],
-    },
+    household: await getHouseholdState(scope),
   };
 }
 
@@ -103,7 +105,7 @@ export async function login(email: string, password: string) {
 
   return {
     token,
-    user: toUserDTO(user),
+    user: await toUserDTO(user),
   };
 }
 
@@ -181,7 +183,7 @@ export async function register(input: RegisterInput) {
   };
   const token = jwt.sign({ userId: user.id } satisfies AuthTokenPayload, env.JWT_SECRET, signOptions);
 
-  return { token, user: toUserDTO(user) };
+  return { token, user: await toUserDTO(user) };
 }
 
 export async function getUserById(userId: string): Promise<UserDTO | null> {
@@ -190,7 +192,7 @@ export async function getUserById(userId: string): Promise<UserDTO | null> {
     select: { id: true, email: true, name: true, avatarUrl: true, householdId: true },
   });
 
-  return user ? toUserDTO(user) : null;
+  return user ? await toUserDTO(user) : null;
 }
 
 export interface UpdateProfileInput {
@@ -236,7 +238,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     select: { id: true, email: true, name: true, avatarUrl: true, householdId: true },
   });
 
-  return toUserDTO(updated);
+  return await toUserDTO(updated);
 }
 
 /** O secret nunca sai da API: o app só precisa saber se existe um cadastrado. */
