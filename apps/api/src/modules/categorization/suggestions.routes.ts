@@ -30,14 +30,14 @@ const dismissSchema = z.object({
 suggestionsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    res.json(await listPendingSuggestions(req.userId!));
+    res.json(await listPendingSuggestions(req.scope!));
   })
 );
 
 suggestionsRouter.get(
   "/count",
   asyncHandler(async (req, res) => {
-    res.json({ count: await countPendingSuggestions(req.userId!) });
+    res.json({ count: await countPendingSuggestions(req.scope!) });
   })
 );
 
@@ -47,7 +47,7 @@ suggestionsRouter.get(
 suggestionsRouter.post(
   "/apply",
   asyncHandler(async (req, res) => {
-    res.json(await applySuggestions(req.userId!, applySchema.parse(req.body ?? {})));
+    res.json(await applySuggestions(req.scope!, applySchema.parse(req.body ?? {})));
   })
 );
 
@@ -55,6 +55,6 @@ suggestionsRouter.post(
   "/dismiss",
   asyncHandler(async (req, res) => {
     const { ids } = dismissSchema.parse(req.body ?? {});
-    res.json(await dismissSuggestions(req.userId!, ids));
+    res.json(await dismissSuggestions(req.scope!, ids));
   })
 );

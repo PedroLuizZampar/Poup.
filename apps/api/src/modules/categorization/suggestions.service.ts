@@ -2,18 +2,25 @@ import { Prisma, SuggestionSource, SuggestionStatus } from "@prisma/client";
 import { prisma } from "../../prisma";
 import type { SuggestionsResponse } from "@poup/shared";
 import { CategoryNotFoundError, SystemCategoryError } from "../../lib/errors";
+import type { Scope } from "../../lib/scope";
 import { reevaluatePendingSuggestions } from "./categorization.service";
 import { TX_INCLUDE, formatTransactionDTO } from "../transactions/transactions.service";
 
-export async function countPendingSuggestions(userId: string): Promise<number> {
+/**
+ * A fila de revisão é uma só para o espaço: a categoria que sai dela vale para
+ * os dois, e deixar cada um com a própria fila faria a mesma decisão ser pedida
+ * duas vezes. Quem sincronizou continua sendo o dono da linha — é o que a
+ * dissolução do espaço lê —, mas quem responde é qualquer membro.
+ */
+export async function countPendingSuggestions(scope: Scope): Promise<number> {
   return prisma.categorySuggestion.count({
-    where: { userId, status: SuggestionStatus.PENDING },
+    where: { userId: { in: scope.memberIds }, status: SuggestionStatus.PENDING },
   });
 }
 
-export async function listPendingSuggestions(userId: string): Promise<SuggestionsResponse> {
+export async function listPendingSuggestions(scope: Scope): Promise<SuggestionsResponse> {
   const rows = await prisma.categorySuggestion.findMany({
-    where: { userId, status: SuggestionStatus.PENDING },
+    where: { userId: { in: scope.memberIds }, status: SuggestionStatus.PENDING },
     // A tela agrupa por categoria sugerida, então esta ordem decide o de dentro
     // de cada grupo: mais recente primeiro, que é o que a pessoa lembra de ter
     // gastado. Confiança na frente mantém as sem palpite (confidence 0) no fim
@@ -63,20 +70,22 @@ export interface ApplySuggestionsInput {
  * o que sobrou na fila merece um palpite calculado com ele.
  */
 export async function applySuggestions(
-  userId: string,
+  scope: Scope,
   { categoryId, acceptIds, rejectIds }: ApplySuggestionsInput
 ): Promise<SuggestionsResponse & { applied: number }> {
-  const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, householdId: scope.householdId },
+  });
   if (!category) throw new CategoryNotFoundError();
   if (category.systemKey) throw new SystemCategoryError();
 
   const marcadas = new Set(acceptIds);
-  // Escopo por `userId` e `PENDING`: id de outra pessoa, ou já resolvido em
+  // Escopo pelos membros e `PENDING`: id de fora do espaço, ou já resolvido em
   // outra aba, simplesmente não entra no lote.
   const rows = await prisma.categorySuggestion.findMany({
     where: {
       id: { in: [...new Set([...acceptIds, ...rejectIds])] },
-      userId,
+      userId: { in: scope.memberIds },
       status: SuggestionStatus.PENDING,
     },
     select: { id: true, transactionId: true, categoryId: true },
@@ -90,7 +99,10 @@ export async function applySuggestions(
   if (aceitas.length > 0) {
     ops.push(
       prisma.transaction.updateMany({
-        where: { id: { in: aceitas.map((row) => row.transactionId) }, userId },
+        where: {
+          id: { in: aceitas.map((row) => row.transactionId) },
+          userId: { in: scope.memberIds },
+        },
         data: { categoryId, transferPairId: null },
       })
     );
@@ -127,9 +139,9 @@ export async function applySuggestions(
     await prisma.$transaction(ops);
   }
 
-  await reevaluatePendingSuggestions(userId);
+  await reevaluatePendingSuggestions(scope);
 
-  return { applied: aceitas.length, ...(await listPendingSuggestions(userId)) };
+  return { applied: aceitas.length, ...(await listPendingSuggestions(scope)) };
 }
 
 /**
@@ -138,13 +150,17 @@ export async function applySuggestions(
  * cobrança: contador, notificação e revisão.
  */
 export async function dismissSuggestions(
-  userId: string,
+  scope: Scope,
   ids: string[]
 ): Promise<SuggestionsResponse & { dismissed: number }> {
   const { count } = await prisma.categorySuggestion.updateMany({
-    where: { id: { in: ids }, userId, status: SuggestionStatus.PENDING },
+    where: {
+      id: { in: ids },
+      userId: { in: scope.memberIds },
+      status: SuggestionStatus.PENDING,
+    },
     data: { status: SuggestionStatus.DISMISSED, resolvedAt: new Date() },
   });
 
-  return { dismissed: count, ...(await listPendingSuggestions(userId)) };
+  return { dismissed: count, ...(await listPendingSuggestions(scope)) };
 }

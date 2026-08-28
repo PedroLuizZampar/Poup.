@@ -2,7 +2,7 @@ import type { Account as PluggyAccount, Transaction as PluggyTransaction } from 
 import { getPluggyClientForUser } from "../../lib/pluggy";
 import { prisma } from "../../prisma";
 import { reconhecerPagamentos, sincronizarFaturas } from "../bills/bills.service";
-import { resolveScope } from "../../lib/scope";
+import type { Scope } from "../../lib/scope";
 import { ItemStatus, AccountType, TransactionType, Prisma, type Item } from "@prisma/client";
 import type { ItemDTO, SyncItemResponse } from "@poup/shared";
 import { validateImageDataUrl } from "../../lib/imageDataUrl";
@@ -62,9 +62,13 @@ function toItemDTO(item: Item): ItemDTO {
   };
 }
 
-export async function listItems(userId: string): Promise<ItemDTO[]> {
+/**
+ * As conexões do espaço. Ver de quem vêm as contas é leitura, e as duas pessoas
+ * precisam disso para entender de onde saiu cada saldo da tela.
+ */
+export async function listItems(scope: Scope): Promise<ItemDTO[]> {
   const items = await prisma.item.findMany({
-    where: { userId },
+    where: { userId: { in: scope.memberIds } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -75,13 +79,19 @@ export async function listItems(userId: string): Promise<ItemDTO[]> {
  * Grava a logo escolhida manualmente para a instituição. Fica em
  * `customImageUrl` — coluna que o sync não escreve — para que atualizar as
  * contas nunca desfaça a escolha do usuário. `null` volta ao logo do conector.
+ *
+ * Qualquer membro pode trocar: é o desenho de uma linha que os dois veem na
+ * tela, e não mexe na conexão em si — não sincroniza, não desconecta e não
+ * encosta nas credenciais do dono.
  */
 export async function updateItemImage(
-  userId: string,
+  scope: Scope,
   id: string,
   imageUrl: string | null
 ): Promise<ItemDTO> {
-  const item = await prisma.item.findFirst({ where: { id, userId } });
+  const item = await prisma.item.findFirst({
+    where: { id, userId: { in: scope.memberIds } },
+  });
   if (!item) {
     throw new ItemNotFoundError();
   }
@@ -94,7 +104,14 @@ export async function updateItemImage(
   return toItemDTO(updated);
 }
 
-export async function deleteItem(userId: string, id: string) {
+/**
+ * Desconectar é do **dono**, e a checagem é escrita de propósito, não por
+ * descuido: apagar o item apaga as contas e as transações que vieram dele, e a
+ * exclusão acontece também na Pluggy, com as credenciais cifradas do dono. Ver
+ * a conexão do parceiro na tela é coisa do espaço; desfazê-la, não.
+ */
+export async function deleteItem(scope: Scope, id: string) {
+  const userId = scope.userId;
   const item = await prisma.item.findFirst({
     where: { id, userId },
   });
@@ -173,9 +190,15 @@ function mapAccountType(account: PluggyAccount): AccountType {
  * sincronizar por id sem conferir o dono reescrevia as contas do item alheio
  * com o `userId` de quem chamou — ou seja, puxava o extrato de outra pessoa
  * para dentro da própria conta.
+ *
+ * `scope.userId`, e não os membros: sincronizar roda com as credenciais Pluggy
+ * cifradas **do dono** da conexão, e um erro de login é problema dele para
+ * resolver. Ver o item da conexão na tela é coisa do espaço; mexer nela, não.
  */
-export async function getUserItem(userId: string, pluggyItemId: string): Promise<Item> {
-  const item = await prisma.item.findFirst({ where: { userId, pluggyItemId } });
+export async function getUserItem(scope: Scope, pluggyItemId: string): Promise<Item> {
+  const item = await prisma.item.findFirst({
+    where: { userId: scope.userId, pluggyItemId },
+  });
   if (!item) {
     throw new ItemNotFoundError();
   }
@@ -479,8 +502,15 @@ async function sincronizarTransacoesDaConta(
   return { examined: transactions.length, criadas, updated: alteracoes.length };
 }
 
-/** Sincroniza um item **já resolvido**, do dono já conferido. */
-export async function syncItem(item: SyncableItem): Promise<SyncResult> {
+/**
+ * Sincroniza um item **já resolvido**, do dono já conferido.
+ *
+ * Recebe o escopo pronto de propósito: resolvê-lo aqui dentro custava duas
+ * consultas por item, e `syncAllItems` chama isto dentro de um laço. Numa
+ * requisição que já disputa o teto de sessenta segundos da função, escopo é
+ * coisa de resolver uma vez.
+ */
+export async function syncItem(scope: Scope, item: SyncableItem): Promise<SyncResult> {
   const { userId, pluggyItemId } = item;
   const client = await getPluggyClientForUser(userId);
 
@@ -614,11 +644,12 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
     transactionsSynced += importadas.examined;
   }
 
-  const review = await processNewTransactions(userId, idsNovos);
+  const review = await processNewTransactions(scope, idsNovos);
 
   // Depois de tudo importado: as duas pontas de um pagamento moram em contas
-  // diferentes e podem ter chegado em sincronizações diferentes.
-  await reconhecerPagamentos(await resolveScope(userId)).catch((err: any) => {
+  // diferentes — de membros diferentes, até — e podem ter chegado em
+  // sincronizações diferentes.
+  await reconhecerPagamentos(scope).catch((err: any) => {
     // Reconhecimento é melhoria, não requisito: falhar aqui não pode desfazer
     // um sync que já gravou tudo.
     console.warn(`Erro ao reconhecer pagamentos de fatura:`, err?.message || err);
@@ -635,10 +666,10 @@ export async function syncItem(item: SyncableItem): Promise<SyncResult> {
 
 /** Sincroniza um item do usuário a partir do id vindo da requisição. */
 export async function syncUserItem(
-  userId: string,
+  scope: Scope,
   pluggyItemId: string
 ): Promise<SyncResult> {
-  return syncItem(await getUserItem(userId, pluggyItemId));
+  return syncItem(scope, await getUserItem(scope, pluggyItemId));
 }
 
 /**
@@ -650,19 +681,26 @@ export async function syncUserItem(
  * conexão já está no app" que ele nunca chegou a ver funcionando.
  */
 export async function addItemById(
-  userId: string,
+  scope: Scope,
   pluggyItemId: string
 ): Promise<SyncResult> {
+  const userId = scope.userId;
   const existing = await prisma.item.findUnique({
     where: { pluggyItemId },
     select: { userId: true, institutionName: true },
   });
 
   if (existing) {
+    // Três respostas, porque são três situações diferentes para quem lê. A do
+    // meio é nova: a conexão do parceiro já aparece na tela, então "está em
+    // outra conta do app" seria mentira — ela está aqui, só não é dele para
+    // sincronizar.
     throw new ConflictError(
       existing.userId === userId
         ? `Esta conexão já está no app (${existing.institutionName}). Use "Sincronizar" para atualizá-la.`
-        : "Este item já está conectado em outra conta do app."
+        : scope.memberIds.includes(existing.userId)
+          ? `Esta conexão (${existing.institutionName}) foi cadastrada por quem divide a conta com você. Sincronizá-la é com essa pessoa.`
+          : "Este item já está conectado em outra conta do app."
     );
   }
 
@@ -676,7 +714,7 @@ export async function addItemById(
   });
 
   try {
-    return await syncItem(created);
+    return await syncItem(scope, created);
   } catch (err) {
     // Só apaga se nada chegou a ser importado — desfazer o item depois de
     // gravar contas deixaria transações órfãs de conexão.
@@ -688,14 +726,18 @@ export async function addItemById(
   }
 }
 
-/** Sincroniza todas as conexões que o usuário cadastrou. */
-export async function syncAllItems(userId: string): Promise<{
+/**
+ * Sincroniza todas as conexões que o usuário cadastrou — as dele, e não as do
+ * espaço: as credenciais Pluggy são de cada um, e um erro de login do parceiro
+ * não é erro que este botão possa resolver.
+ */
+export async function syncAllItems(scope: Scope): Promise<{
   itemsSynced: number;
   accountsSynced: number;
   transactionsSynced: number;
   review: ProcessResult;
 }> {
-  const items = await prisma.item.findMany({ where: { userId } });
+  const items = await prisma.item.findMany({ where: { userId: scope.userId } });
 
   if (items.length === 0) {
     throw new UnprocessableError(
@@ -710,7 +752,7 @@ export async function syncAllItems(userId: string): Promise<{
 
   for (const item of items) {
     try {
-      const res = await syncItem(item);
+      const res = await syncItem(scope, item);
       totalAccounts += res.accountsSynced;
       totalTransactions += res.transactionsSynced;
       totalReview.transfers += res.review.transfers;
@@ -767,9 +809,13 @@ export interface BackfillResult {
  *   de revisão do tamanho de cinco anos de extrato.
  */
 export async function backfillAccount(
-  userId: string,
+  scope: Scope,
   accountId: string
 ): Promise<BackfillResult> {
+  // Buscar histórico é sincronizar, e sincronizar é do dono: a chamada roda com
+  // as credenciais Pluggy cifradas dele. Por isso `scope.userId`, e não os
+  // membros — mesmo que a conta do parceiro apareça na tela dos dois.
+  const userId = scope.userId;
   const account = await prisma.account.findFirst({
     where: { id: accountId, userId },
     select: { id: true, pluggyAccountId: true, type: true },
@@ -803,9 +849,9 @@ export async function backfillAccount(
     account.pluggyAccountId
   );
 
-  const review = await processNewTransactions(userId, importadas.criadas);
+  const review = await processNewTransactions(scope, importadas.criadas);
 
-  await reconhecerPagamentos(await resolveScope(userId)).catch((err: any) => {
+  await reconhecerPagamentos(scope).catch((err: any) => {
     // Reconhecimento é melhoria, não requisito: falhar aqui não pode desfazer
     // um histórico que já foi gravado.
     console.warn(`Erro ao reconhecer pagamentos de fatura:`, err?.message || err);

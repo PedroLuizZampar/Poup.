@@ -40,10 +40,10 @@ pluggyRouter.post(
     // resolve o item pelo par (userId, pluggyItemId) e devolve 404 se não for
     // dele — o id sozinho não prova nada, é único global.
     const result = parsed.pluggyItemId
-      ? await syncUserItem(req.userId!, parsed.pluggyItemId)
-      : await syncAllItems(req.userId!);
+      ? await syncUserItem(req.scope!, parsed.pluggyItemId)
+      : await syncAllItems(req.scope!);
 
-    await createReviewNotification(req.userId!, result.review);
+    await createReviewNotification(req.scope!, result.review);
 
     res.json(result);
   })
@@ -53,8 +53,8 @@ pluggyRouter.post(
   "/items",
   asyncHandler(async (req, res) => {
     const { pluggyItemId } = addItemSchema.parse(req.body);
-    const result = await addItemById(req.userId!, pluggyItemId);
-    await createReviewNotification(req.userId!, result.review);
+    const result = await addItemById(req.scope!, pluggyItemId);
+    await createReviewNotification(req.scope!, result.review);
     res.status(201).json(result);
   })
 );
@@ -62,7 +62,7 @@ pluggyRouter.post(
 pluggyRouter.get(
   "/items",
   asyncHandler(async (req, res) => {
-    const items = await listItems(req.userId!);
+    const items = await listItems(req.scope!);
     res.json({ items });
   })
 );
@@ -71,7 +71,7 @@ pluggyRouter.patch(
   "/items/:id/image",
   asyncHandler(async (req, res) => {
     const { imageUrl } = updateItemImageSchema.parse(req.body);
-    const item = await updateItemImage(req.userId!, req.params.id, imageUrl);
+    const item = await updateItemImage(req.scope!, req.params.id, imageUrl);
     res.json({ item });
   })
 );
@@ -87,8 +87,8 @@ pluggyRouter.patch(
 pluggyRouter.post(
   "/accounts/:accountId/backfill",
   asyncHandler(async (req, res) => {
-    const result = await backfillAccount(req.userId!, req.params.accountId);
-    await createReviewNotification(req.userId!, result.review);
+    const result = await backfillAccount(req.scope!, req.params.accountId);
+    await createReviewNotification(req.scope!, result.review);
     res.json(result);
   })
 );
@@ -96,7 +96,7 @@ pluggyRouter.post(
 pluggyRouter.delete(
   "/items/:id",
   asyncHandler(async (req, res) => {
-    await deleteItem(req.userId!, req.params.id);
+    await deleteItem(req.scope!, req.params.id);
     res.json({ success: true });
   })
 );

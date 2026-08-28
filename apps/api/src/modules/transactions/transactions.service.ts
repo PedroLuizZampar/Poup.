@@ -274,7 +274,7 @@ export async function createTransaction(
   // Lançamento manual sem categoria é uma decisão adiada como qualquer outra: a
   // fila de revisão é onde ela espera.
   if (semCategoria) {
-    await reopenPendingSuggestion(scope.userId, created.id);
+    await reopenPendingSuggestion(scope, created.id);
   }
 
   return formatTransactionDTO(created);
@@ -326,7 +326,7 @@ export async function updateTransaction(
           categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED],
         },
       });
-      await reopenPendingSuggestion(scope.userId, orfa.id);
+      await reopenPendingSuggestion(scope, orfa.id);
     }
 
     await prisma.transaction.update({
@@ -359,7 +359,7 @@ export async function updateTransaction(
   });
 
   if (voltouParaAFila) {
-    await reopenPendingSuggestion(scope.userId, id);
+    await reopenPendingSuggestion(scope, id);
   }
 
   return formatTransactionDTO(updated);

@@ -11,6 +11,8 @@ import {
 } from "../../lib/categorization";
 import { ensureSystemCategories } from "../../lib/systemCategories";
 import { buscarEmLotes, emLotes, LOTE } from "../../lib/lotes";
+import type { Scope } from "../../lib/scope";
+import { TransactionNotFoundError } from "../../lib/errors";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -31,16 +33,22 @@ export interface ProcessResult {
  * usuário na fila de revisão. O que sobra vai para a oculta correspondente ao
  * tipo — nenhuma transação sai daqui sem categoria — e só então recebe (ou não)
  * uma sugestão pendente.
+ *
+ * As linhas que entram aqui são sempre de quem sincronizou — sincronizar é do
+ * dono da conexão —, então o que **pertence** ao usuário continua filtrado por
+ * `scope.userId`. Do espaço vêm as categorias e o histórico que alimenta o
+ * palpite: quem entra hoje aproveita o que o parceiro já ensinou.
  */
 export async function processNewTransactions(
-  userId: string,
+  scope: Scope,
   transactionIds: string[]
 ): Promise<ProcessResult> {
   if (transactionIds.length === 0) {
     return { transfers: 0, suggested: 0, withoutGuess: 0 };
   }
 
-  const systemIds = await ensureSystemCategories(prisma, userId);
+  const userId = scope.userId;
+  const systemIds = await ensureSystemCategories(prisma, scope.householdId);
   const systemIdSet = new Set(Object.values(systemIds));
 
   const novas = await buscarEmLotes(transactionIds, (lote) =>
@@ -66,6 +74,12 @@ export async function processNewTransactions(
 
   // 1. Universo do pareamento: a outra ponta pode ter entrado num sync
   //    anterior, então a janela de datas manda, não o lote.
+  //
+  //    Continua sendo o de **uma** pessoa, e de propósito: parear a despesa de
+  //    um membro com a receita do outro marcaria as duas como transferência
+  //    interna e as tiraria dos totais — que é justamente o modo de falhar em
+  //    silêncio que este refactor está consertando. Dinheiro que anda entre os
+  //    dois é outra pergunta, e não é esta função que a responde.
   const datas = novas.map((t) => t.date.getTime());
   const universo = await prisma.transaction.findMany({
     where: {
@@ -164,7 +178,7 @@ export async function processNewTransactions(
   }
 
   // 3. Índice de histórico, construído uma vez para o lote inteiro.
-  const ctx = await buildSuggestionContext(userId, systemIdSet, novas.map((t) => t.id));
+  const ctx = await buildSuggestionContext(scope, systemIdSet, novas.map((t) => t.id));
 
   // 4. Sugestões — uma por transação sem categoria, **inclusive as sem palpite**.
   //
@@ -208,27 +222,31 @@ export async function processNewTransactions(
 
 /**
  * O que o motor usa para arriscar um palpite: o histórico já categorizado pelo
- * usuário e as categorias que ele pode escolher. As de sistema ficam de fora do
- * histórico — "Sem categoria" não ensina nada, e "Transferência entre contas"
+ * **espaço** e as categorias que ele pode escolher. As de sistema ficam de fora
+ * do histórico — "Sem categoria" não ensina nada, e "Transferência entre contas"
  * ensinaria errado.
+ *
+ * O histórico soma os dois membros porque a categoria é uma só para os dois:
+ * "Zé da Esquina" ensinado por um responde pelo outro, e quem entra hoje já
+ * chega aproveitando o que o parceiro categorizou.
  *
  * `excluirTransacoes` tira do histórico as transações que estão sendo julgadas
  * agora: elas ainda não são decisão de ninguém, e deixá-las entrar faria o
  * palpite se apoiar em si mesmo.
  */
 async function buildSuggestionContext(
-  userId: string,
+  scope: Scope,
   systemIdSet: Set<string>,
   excluirTransacoes: string[] = []
 ): Promise<SuggestionContext> {
   const selecionaveis = await prisma.category.findMany({
-    where: { userId, systemKey: null },
+    where: { householdId: scope.householdId, systemKey: null },
     select: { id: true, name: true },
   });
 
   const historico = await prisma.transaction.findMany({
     where: {
-      userId,
+      userId: { in: scope.memberIds },
       categoryId: { notIn: Array.from(systemIdSet) },
       ...(excluirTransacoes.length > 0 ? { id: { notIn: excluirTransacoes } } : {}),
     },
@@ -256,10 +274,19 @@ async function buildSuggestionContext(
  *
  * Fica de fora quem teve o palpite recusado à mão (`guessRejected`): devolver
  * ali o palpite que o usuário acabou de desmarcar seria desfazer a decisão dele.
+ *
+ * A fila que a tela abre é a do espaço, então a reavaliação também é: deixar as
+ * pendentes do parceiro de fora daria uma tela em que metade das linhas melhora
+ * a cada lote aprovado e a outra metade fica parada no palpite do dia da
+ * importação.
  */
-export async function reevaluatePendingSuggestions(userId: string): Promise<number> {
+export async function reevaluatePendingSuggestions(scope: Scope): Promise<number> {
   const pendentes = await prisma.categorySuggestion.findMany({
-    where: { userId, status: SuggestionStatus.PENDING, guessRejected: false },
+    where: {
+      userId: { in: scope.memberIds },
+      status: SuggestionStatus.PENDING,
+      guessRejected: false,
+    },
     select: {
       id: true,
       categoryId: true,
@@ -270,8 +297,8 @@ export async function reevaluatePendingSuggestions(userId: string): Promise<numb
   });
   if (pendentes.length === 0) return 0;
 
-  const systemIds = await ensureSystemCategories(prisma, userId);
-  const ctx = await buildSuggestionContext(userId, new Set(Object.values(systemIds)));
+  const systemIds = await ensureSystemCategories(prisma, scope.householdId);
+  const ctx = await buildSuggestionContext(scope, new Set(Object.values(systemIds)));
 
   const mudancas = pendentes.flatMap((pendente) => {
     const palpite = suggestCategory({ description: pendente.transaction.description }, ctx);
@@ -312,11 +339,24 @@ export async function reevaluatePendingSuggestions(userId: string): Promise<numb
  * Entra como `NONE` com `guessRejected`: quem acabou de tirar a categoria à mão
  * não quer que a reavaliação do próximo lote devolva um palpite para o mesmo
  * comerciante. Ela cai na última página da revisão, onde a escolha é manual.
+ *
+ * A sugestão nasce com o dono da **transação**, e não com quem editou: no
+ * espaço conjunto eu posso tirar a categoria de uma linha do parceiro, e a
+ * pendência é dele. Gravar o meu id ali faria a dissolução do espaço levar
+ * embora a sugestão de uma transação que fica com ele.
  */
 export async function reopenPendingSuggestion(
-  userId: string,
+  scope: Scope,
   transactionId: string
 ): Promise<void> {
+  const transacao = await prisma.transaction.findFirst({
+    where: { id: transactionId, userId: { in: scope.memberIds } },
+    select: { userId: true },
+  });
+  // Os chamadores já conferiram a posse antes de chegar aqui; se não achou, o
+  // certo é estourar e não gravar uma pendência órfã em silêncio.
+  if (!transacao) throw new TransactionNotFoundError();
+
   const pendente = {
     categoryId: null,
     source: SuggestionSource.NONE,
@@ -329,7 +369,7 @@ export async function reopenPendingSuggestion(
 
   await prisma.categorySuggestion.upsert({
     where: { transactionId },
-    create: { userId, transactionId, ...pendente },
+    create: { userId: transacao.userId, transactionId, ...pendente },
     update: pendente,
   });
 }
@@ -345,31 +385,40 @@ export async function reopenPendingSuggestion(
  *
  * `upsert`, e nao `createMany`: uma transacao mal classificada pode ja ter uma
  * sugestao RESOLVED de antes, e uma linha resolvida nao aparece na fila.
+ *
+ * **Recebe o espaco inteiro, e nao um usuario.** Quem chama e
+ * `reconhecerPagamentos`, que varre os dois membros: a fatura do cartao de um
+ * pode ter sido paga pela conta corrente do outro. Filtrar por um `userId` so
+ * fazia o `updateMany` da linha do parceiro casar com zero linhas — a transacao
+ * ficava em "Pagamento de fatura", que o relatorio esconde, e sumia dos totais
+ * sem erro, sem entrar em fila nenhuma e sem se corrigir no sync seguinte.
  */
 export async function enfileirarParaRevisao(
-  userId: string,
+  scope: Scope,
   transactionIds: string[]
 ): Promise<number> {
   if (transactionIds.length === 0) return 0;
 
-  const systemIds = await ensureSystemCategories(prisma, userId);
+  const systemIds = await ensureSystemCategories(prisma, scope.householdId);
 
   for (const lote of emLotes(transactionIds)) {
     await prisma.transaction.updateMany({
-      where: { id: { in: lote }, userId },
+      where: { id: { in: lote }, userId: { in: scope.memberIds } },
       data: { categoryId: systemIds[SystemCategoryKey.UNCATEGORIZED] },
     });
   }
 
   const linhas = await buscarEmLotes(transactionIds, (lote) =>
     prisma.transaction.findMany({
-      where: { id: { in: lote }, userId },
-      select: { id: true, description: true },
+      where: { id: { in: lote }, userId: { in: scope.memberIds } },
+      // `userId` vem junto porque a sugestao e do dono da transacao, e o lote
+      // pode misturar linhas dos dois membros.
+      select: { id: true, description: true, userId: true },
     })
   );
 
   const ctx = await buildSuggestionContext(
-    userId,
+    scope,
     new Set(Object.values(systemIds)),
     linhas.map((t) => t.id)
   );
@@ -388,7 +437,7 @@ export async function enfileirarParaRevisao(
 
     return prisma.categorySuggestion.upsert({
       where: { transactionId: tx.id },
-      create: { userId, transactionId: tx.id, ...pendente },
+      create: { userId: tx.userId, transactionId: tx.id, ...pendente },
       update: pendente,
     });
   });

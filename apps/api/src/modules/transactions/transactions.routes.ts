@@ -87,7 +87,7 @@ transactionsRouter.post(
   "/bulk-categorize",
   asyncHandler(async (req, res) => {
     const { transactionIds, categoryId } = bulkCategorizeSchema.parse(req.body);
-    res.json(await bulkCategorize(req.userId!, transactionIds, categoryId));
+    res.json(await bulkCategorize(req.scope!, transactionIds, categoryId));
   })
 );
 
@@ -95,7 +95,7 @@ transactionsRouter.get(
   "/:id/similar",
   asyncHandler(async (req, res) => {
     const categoryId = z.string().min(1).parse(req.query.categoryId);
-    res.json(await findSimilarTransactions(req.userId!, req.params.id, categoryId));
+    res.json(await findSimilarTransactions(req.scope!, req.params.id, categoryId));
   })
 );
 

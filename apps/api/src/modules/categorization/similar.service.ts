@@ -8,6 +8,7 @@ import {
   TransactionNotFoundError,
 } from "../../lib/errors";
 import { ensureSystemCategories } from "../../lib/systemCategories";
+import type { Scope } from "../../lib/scope";
 import { reevaluatePendingSuggestions } from "./categorization.service";
 import { TX_INCLUDE, formatTransactionDTO } from "../transactions/transactions.service";
 
@@ -20,8 +21,14 @@ const HISTORY_MONTHS = 24;
 const MAX_CANDIDATES = 500;
 const MAX_PER_SECTION = 50;
 
+/**
+ * As parecidas são as do **espaço**: a lista de transações que a tela mostra já
+ * é a dos dois, e oferecer "aplicar a parecidas" sobre um universo menor do que
+ * o que está na tela deixaria de fora justamente as linhas que a pessoa acabou
+ * de ver ali.
+ */
 export async function findSimilarTransactions(
-  userId: string,
+  scope: Scope,
   transactionId: string,
   categoryId: string
 ): Promise<{
@@ -29,12 +36,12 @@ export async function findSimilarTransactions(
   differentCategory: SimilarTransactionDTO[];
 }> {
   const base = await prisma.transaction.findFirst({
-    where: { id: transactionId, userId },
+    where: { id: transactionId, userId: { in: scope.memberIds } },
     select: { id: true, description: true },
   });
   if (!base) throw new TransactionNotFoundError();
 
-  const systemIds = await ensureSystemCategories(prisma, userId);
+  const systemIds = await ensureSystemCategories(prisma, scope.householdId);
   const semCategoria = [systemIds[SystemCategoryKey.UNCATEGORIZED]];
 
   const desde = new Date();
@@ -42,7 +49,7 @@ export async function findSimilarTransactions(
 
   const candidatas = await prisma.transaction.findMany({
     where: {
-      userId,
+      userId: { in: scope.memberIds },
       id: { not: base.id },
       date: { gte: desde },
       // Transferência interna e pagamento de fatura não entram: as duas já
@@ -82,18 +89,28 @@ export async function findSimilarTransactions(
   };
 }
 
+/**
+ * Categoriza um lote inteiro de uma vez.
+ *
+ * O lote é do **espaço**: a lista de transações mostra as dos dois membros, e a
+ * seleção da tela mistura as duas naturalmente. Com o filtro por um `userId` só,
+ * as linhas do parceiro casavam com zero linhas — a resposta dizia sucesso, o
+ * contador vinha menor do que o selecionado e ninguém era avisado de nada.
+ */
 export async function bulkCategorize(
-  userId: string,
+  scope: Scope,
   transactionIds: string[],
   categoryId: string
 ): Promise<{ updated: number }> {
-  const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, householdId: scope.householdId },
+  });
   if (!category) throw new CategoryNotFoundError();
   if (category.systemKey) throw new SystemCategoryError();
 
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.transaction.updateMany({
-      where: { id: { in: transactionIds }, userId },
+      where: { id: { in: transactionIds }, userId: { in: scope.memberIds } },
       data: { categoryId, transferPairId: null },
     });
 
@@ -101,7 +118,7 @@ export async function bulkCategorize(
     // pedindo a mesma decisão.
     await tx.categorySuggestion.updateMany({
       where: {
-        userId,
+        userId: { in: scope.memberIds },
         transactionId: { in: transactionIds },
         status: SuggestionStatus.PENDING,
       },
@@ -118,7 +135,7 @@ export async function bulkCategorize(
   // O lote que acabou de ser aplicado é histórico novo: o que continua na fila
   // merece um palpite calculado com ele. É o mesmo passo que a revisão dá a
   // cada página confirmada — aplicar em parecidas ensina tanto quanto.
-  await reevaluatePendingSuggestions(userId);
+  await reevaluatePendingSuggestions(scope);
 
   return { updated: result };
 }

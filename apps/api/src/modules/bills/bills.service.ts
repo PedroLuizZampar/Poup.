@@ -307,7 +307,11 @@ export async function reconhecerPagamentos(scope: Scope): Promise<number> {
     });
   }
 
-  await enfileirarParaRevisao(scope.userId, paraReverter);
+  // O espaco inteiro, e nao `scope.userId`: `paraReverter` sai de um universo
+  // que soma os dois membros, e um lote misto precisa alcancar as linhas dos
+  // dois. Passar so quem sincronizou deixava a linha do parceiro em "Pagamento
+  // de fatura" — que o relatorio esconde — sem erro e sem fila.
+  await enfileirarParaRevisao(scope, paraReverter);
 
   return marcacoes.length + paraReverter.length;
 }

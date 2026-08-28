@@ -41,17 +41,25 @@ const REVIEW_LINK = "/revisao";
  * três syncs quer saber o tamanho do trabalho que sobrou, e a notificação é o
  * único lugar onde esse número aparece antes de a tela abrir. O corpo é que
  * conta o lote — quantas o app adivinhou e quantas ficaram sem palpite.
+ *
+ * A linha vai só para quem rodou o sync — foi a ação dele que trouxe as
+ * transações —, mas a contagem é a do espaço, porque a fila que ela abre também
+ * é.
  */
 export async function createReviewNotification(
-  userId: string,
+  scope: Scope,
   result: ProcessResult
 ): Promise<void> {
   // O sync pode não ter trazido nada novo, ou ter trazido só transferências
   // internas — que já nascem categorizadas e não vão para a fila.
   if (result.suggested + result.withoutGuess === 0) return;
 
+  const userId = scope.userId;
+
+  // A contagem é do espaço: o título promete um número, e a tela de revisão que
+  // ele abre mostra a fila do casal. Contar só as minhas mentiria no título.
   const pendentes = await prisma.categorySuggestion.count({
-    where: { userId, status: "PENDING" },
+    where: { userId: { in: scope.memberIds }, status: "PENDING" },
   });
   if (pendentes === 0) return;
 
@@ -87,6 +95,10 @@ export async function createReviewNotification(
   });
 }
 
+/**
+ * Continua por pessoa, e não por espaço: "lido" é um estado de quem leu, e uma
+ * linha só compartilhada faria a leitura de um apagar o aviso do outro.
+ */
 export async function listNotifications(userId: string): Promise<{
   notifications: NotificationDTO[];
   unreadCount: number;
@@ -104,60 +116,43 @@ export async function listNotifications(userId: string): Promise<{
   };
 }
 
+/**
+ * Os alertas de orçamento do mês, gravados uma vez para cada membro do espaço.
+ *
+ * O orçamento é do casal: quem estourou o teto de mercado foram os dois, e
+ * avisar só quem abriu o app deixaria o outro sem saber. A linha, porém, é por
+ * pessoa — "lido" é por pessoa —, e por isso a deduplicação de sete dias
+ * continua sendo por `(userId, título)`, que segue correta com uma linha para
+ * cada.
+ */
 export async function generateAutomaticAlerts(scope: Scope): Promise<number> {
   let createdCount = 0;
-  const now = new Date();
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  // Trocado de userId para Scope só para compilar contra o novo listBudgets —
-  // ainda notifica só quem chamou o /check, não os dois membros do espaço. O
-  // fan-out por membro é da Task 9.
-  const userId = scope.userId;
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   // 1. Checar Orçamentos do mês atual
   const budgets = await listBudgets(scope);
   for (const b of budgets) {
-    if (b.status === "exceeded") {
-      const title = `Orçamento estourado: ${b.categoryName}`;
-      const existing = await prisma.notification.findFirst({
-        where: {
-          userId,
-          title,
-          createdAt: { gte: sevenDaysAgo },
-        },
-      });
+    if (b.status !== "exceeded" && b.status !== "warning") continue;
 
-      if (!existing) {
-        await prisma.notification.create({
-          data: {
-            userId,
-            title,
-            body: `Você ultrapassou o limite definido para ${b.categoryName}. Total gasto: R$ ${b.spent.toFixed(2)} de R$ ${b.monthlyLimit.toFixed(2)} (${b.percentage}%).`,
-            severity: NotificationSeverity.ERROR,
-          },
-        });
-        createdCount++;
-      }
-    } else if (b.status === "warning") {
-      const title = `Atenção ao orçamento: ${b.categoryName}`;
-      const existing = await prisma.notification.findFirst({
-        where: {
-          userId,
-          title,
-          createdAt: { gte: sevenDaysAgo },
-        },
-      });
+    const excedido = b.status === "exceeded";
+    const title = excedido
+      ? `Orçamento estourado: ${b.categoryName}`
+      : `Atenção ao orçamento: ${b.categoryName}`;
+    const body = excedido
+      ? `Você ultrapassou o limite definido para ${b.categoryName}. Total gasto: R$ ${b.spent.toFixed(2)} de R$ ${b.monthlyLimit.toFixed(2)} (${b.percentage}%).`
+      : `Você atingiu ${b.percentage}% do limite de R$ ${b.monthlyLimit.toFixed(2)} em ${b.categoryName}.`;
+    const severity = excedido ? NotificationSeverity.ERROR : NotificationSeverity.WARNING;
 
-      if (!existing) {
-        await prisma.notification.create({
-          data: {
-            userId,
-            title,
-            body: `Você atingiu ${b.percentage}% do limite de R$ ${b.monthlyLimit.toFixed(2)} em ${b.categoryName}.`,
-            severity: NotificationSeverity.WARNING,
-          },
-        });
-        createdCount++;
-      }
+    for (const memberId of scope.memberIds) {
+      const existing = await prisma.notification.findFirst({
+        where: { userId: memberId, title, createdAt: { gte: sevenDaysAgo } },
+      });
+      if (existing) continue;
+
+      await prisma.notification.create({
+        data: { userId: memberId, title, body, severity },
+      });
+      createdCount++;
     }
   }
 

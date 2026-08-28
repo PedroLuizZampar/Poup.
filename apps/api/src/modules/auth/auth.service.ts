@@ -138,18 +138,31 @@ export async function register(input: RegisterInput) {
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
-  const user = await prisma.user.create({
-    data: {
-      email,
-      name,
-      passwordHash,
-      pluggyClientId: clientId,
-      pluggyClientSecret: encryptSecret(clientSecret),
-    },
-  });
+  // O usuário e o espaço nascem juntos, na mesma transação: um usuário sem
+  // `householdId` não enxerga categoria, orçamento nem meta — é o espaço que
+  // define o que ele pode ler —, então ele não pode existir sem espaço nem por
+  // um instante. Falhar no meio não pode deixar para trás uma conta que faz
+  // login e não carrega nenhuma tela.
+  const user = await prisma.$transaction(async (tx) => {
+    const household = await tx.household.create({ data: {} });
 
-  // Conta sem categoria não categoriza a primeira transação nem cria orçamento.
-  await createDefaultCategories(prisma, user.id);
+    const criado = await tx.user.create({
+      data: {
+        email,
+        name,
+        passwordHash,
+        pluggyClientId: clientId,
+        pluggyClientSecret: encryptSecret(clientSecret),
+        householdId: household.id,
+      },
+    });
+
+    // Espaço sem categoria não categoriza a primeira transação nem cria
+    // orçamento — e as categorias são do espaço, não do usuário.
+    await createDefaultCategories(tx, household.id);
+
+    return criado;
+  });
 
   const signOptions: jwt.SignOptions = {
     expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
