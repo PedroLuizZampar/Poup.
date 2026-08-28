@@ -23,4 +23,23 @@ describe("normalizeCategoryName", () => {
   it("não funde nomes que só se parecem", () => {
     expect(normalizeCategoryName("Mercado")).not.toBe(normalizeCategoryName("Mercadinho"));
   });
+
+  /**
+   * Uma categoria que normaliza para string vazia é uma edge case possível
+   * (por exemplo, um nome feito apenas de acentos soltos), embora raro.
+   * Task 14 precisa saber disso para evitar fundir dois nomes diferentes
+   * que ambos normalizam para "".
+   */
+  it("normaliza string vazia para string vazia", () => {
+    expect(normalizeCategoryName("")).toBe("");
+  });
+
+  it("normaliza espaço em branco puro para string vazia", () => {
+    expect(normalizeCategoryName("   ")).toBe("");
+  });
+
+  it("normaliza nome feito apenas de acentos para string vazia", () => {
+    // Um acento solto (combining mark) sem base character
+    expect(normalizeCategoryName("́̂̃")).toBe("");
+  });
 });
