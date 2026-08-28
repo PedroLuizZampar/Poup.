@@ -2,8 +2,10 @@ import React, { FormEvent, useState } from "react";
 import type { HouseholdInviteDTO, HouseholdMemberDTO, HouseholdStateDTO } from "@poup/shared";
 import {
   ApiError,
+  acceptHouseholdInvite,
   cancelHouseholdInvite,
   declineHouseholdInvite,
+  leaveHousehold,
   sendHouseholdInvite,
 } from "../../lib/api";
 import { Card } from "../ui/Card";
@@ -12,6 +14,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { UserAvatar } from "../ui/UserAvatar";
 import { useToast } from "../ui/Toast";
+import { useConfirm } from "../ui/ConfirmDialog";
 
 export interface ContaConjuntaSectionProps {
   household: HouseholdStateDTO;
@@ -52,7 +55,9 @@ export function ContaConjuntaSection({ household, onChanged }: ContaConjuntaSect
         {estado === "convite-recebido" && (
           <ConviteRecebido invite={household.invitesReceived[0]} onChanged={onChanged} />
         )}
-        {estado === "espaco-formado" && <EspacoFormado members={household.members} />}
+        {estado === "espaco-formado" && (
+          <EspacoFormado members={household.members} onChanged={onChanged} />
+        )}
         {estado === "convite-enviado" && (
           <ConviteEnviado invite={household.invitesSent[0]} onChanged={onChanged} />
         )}
@@ -70,12 +75,22 @@ function ConviteRecebido({
   invite: HouseholdInviteDTO;
   onChanged: () => void | Promise<void>;
 }) {
+  const [aceitando, setAceitando] = useState(false);
   const [recusando, setRecusando] = useState(false);
   const toast = useToast();
 
-  // Aceitar depende de fundir categorias e orçamentos, que é a Task 14. O botão
-  // fica desabilitado até lá — o onClick já existe para a Task 14 só plugar.
-  function onAccept() {}
+  async function handleAceitar() {
+    try {
+      setAceitando(true);
+      await acceptHouseholdInvite(invite.id);
+      toast.success("Pronto! As contas de vocês agora são um conjunto só.");
+      await onChanged();
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível aceitar o convite.");
+    } finally {
+      setAceitando(false);
+    }
+  }
 
   async function handleRecusar() {
     try {
@@ -109,13 +124,19 @@ function ConviteRecebido({
         <Button
           variant="primary"
           size="sm"
-          disabled
-          onClick={onAccept}
-          title="Em breve"
+          loading={aceitando}
+          disabled={recusando}
+          onClick={handleAceitar}
         >
           Aceitar
         </Button>
-        <Button variant="secondary" size="sm" loading={recusando} onClick={handleRecusar}>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={recusando}
+          disabled={aceitando}
+          onClick={handleRecusar}
+        >
           Recusar
         </Button>
       </div>
@@ -124,10 +145,43 @@ function ConviteRecebido({
 }
 
 /** Estado 2: o espaço já tem mais de uma pessoa. */
-function EspacoFormado({ members }: { members: HouseholdMemberDTO[] }) {
-  // Sair do espaço é a Task 15 — depende de desfazer a fusão de categorias e
-  // orçamentos, então o botão fica desabilitado até lá.
-  function onLeave() {}
+function EspacoFormado({
+  members,
+  onChanged,
+}: {
+  members: HouseholdMemberDTO[];
+  onChanged: () => void | Promise<void>;
+}) {
+  const [saindo, setSaindo] = useState(false);
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  // A saída não tem desfazer: não há de-para guardado, então voltar atrás
+  // significaria convidar e fundir de novo, e a fusão não devolve o conjunto que
+  // cada um tinha antes. O aviso conta as duas consequências que surpreendem —
+  // a cópia e o teto que vale inteiro para os dois — antes do clique.
+  async function handleSair() {
+    const ok = await confirm({
+      title: "Sair da conta conjunta",
+      message:
+        "Cada um fica com uma cópia das categorias, orçamentos e metas, e o histórico de vocês " +
+        "continua inteiro. O limite de cada orçamento vale integralmente para os dois.",
+      confirmText: "Sair",
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      setSaindo(true);
+      await leaveHousehold();
+      toast.success("Conta conjunta desfeita.");
+      await onChanged();
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível sair da conta conjunta.");
+    } finally {
+      setSaindo(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -146,9 +200,8 @@ function EspacoFormado({ members }: { members: HouseholdMemberDTO[] }) {
       <Button
         variant="secondary"
         size="sm"
-        disabled
-        onClick={onLeave}
-        title="Em breve"
+        loading={saindo}
+        onClick={handleSair}
         className="self-start"
       >
         Sair da conta conjunta

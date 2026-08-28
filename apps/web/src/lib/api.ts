@@ -560,10 +560,25 @@ export async function sendHouseholdInvite(email: string): Promise<HouseholdInvit
   return res.invite;
 }
 
+export async function acceptHouseholdInvite(id: string): Promise<HouseholdStateDTO> {
+  const res = await request<{ household: HouseholdStateDTO }>(
+    `/household/invites/${id}/accept`,
+    { method: "POST" }
+  );
+  return res.household;
+}
+
 export async function declineHouseholdInvite(id: string): Promise<void> {
   await request(`/household/invites/${id}/decline`, { method: "POST" });
 }
 
 export async function cancelHouseholdInvite(id: string): Promise<void> {
   await request(`/household/invites/${id}`, { method: "DELETE" });
+}
+
+export async function leaveHousehold(): Promise<HouseholdStateDTO> {
+  const res = await request<{ household: HouseholdStateDTO }>("/household/leave", {
+    method: "POST",
+  });
+  return res.household;
 }
