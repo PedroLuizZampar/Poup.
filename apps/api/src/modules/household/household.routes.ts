@@ -6,6 +6,7 @@ import { asyncHandler } from "../../middleware/errorHandler";
 import {
   getHouseholdState,
   inviteToHousehold,
+  acceptInvite,
   declineInvite,
   cancelInvite,
 } from "./household.service";
@@ -32,6 +33,14 @@ householdRouter.post(
     const { email } = inviteSchema.parse(req.body);
     const invite = await inviteToHousehold(req.scope!, email);
     res.status(201).json({ invite });
+  })
+);
+
+householdRouter.post(
+  "/invites/:id/accept",
+  asyncHandler(async (req, res) => {
+    const household = await acceptInvite(req.scope!, req.params.id);
+    res.json({ household });
   })
 );
 

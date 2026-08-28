@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma";
 import type { HouseholdInviteDTO, HouseholdStateDTO } from "@poup/shared";
-import type { Scope } from "../../lib/scope";
+import { resolveScope, type Scope } from "../../lib/scope";
 import { ConviteInvalidoError, ConviteNaoEncontradoError } from "../../lib/errors";
+import { mergeHouseholds } from "./merge";
 
 const LINK_CONJUNTA = "/perfil#conjunta";
 
@@ -130,6 +131,99 @@ export async function inviteToHousehold(
   });
 
   return formatInviteDTO(invite);
+}
+
+/**
+ * Uma transação só, com folga de tempo.
+ *
+ * A fusão é uma sequência longa de idas ao banco — quatro por categoria
+ * absorvida — contra um Neon remoto, e o teto padrão do Prisma para transação
+ * interativa é de 5 s. Estourar no meio de uma fusão é o pior desfecho possível,
+ * então o teto sobe; somado ao `maxWait` continua bem abaixo dos 60 s da função
+ * da Vercel.
+ */
+const TRANSACAO_DA_FUSAO = { timeout: 25_000, maxWait: 10_000 } as const;
+
+/**
+ * Aceitar funde o meu espaço no de quem convidou, e some com o meu.
+ *
+ * O `status: "PENDING"` viaja dentro do `updateMany`, e não fica só na leitura
+ * anterior: entre ler e escrever, quem convidou pode ter cancelado. E como esta
+ * é a primeira escrita da transação, quem chega depois casa zero linhas e a
+ * transação inteira volta atrás — em vez de mudar alguém de espaço por causa de
+ * um convite que já não existe. O `findFirst` continua aqui só para saber para
+ * onde fundir e quem notificar.
+ *
+ * Tudo o que move dado acontece dentro do mesmo `$transaction`: meia fusão
+ * deixaria duas pessoas meio juntas, e não há de-para para desfazer.
+ */
+export async function acceptInvite(
+  scope: Scope,
+  inviteId: string
+): Promise<HouseholdStateDTO> {
+  const invite = await prisma.householdInvite.findFirst({
+    where: { id: inviteId, inviteeId: scope.userId, status: "PENDING" },
+    select: { householdId: true, inviterId: true, inviteeEmail: true },
+  });
+  if (!invite) throw new ConviteNaoEncontradoError();
+
+  // Quem ja divide um espaco com outra pessoa precisa sair de la primeiro: a
+  // fusao move o espaco inteiro, e mover um espaco povoado levaria junto quem
+  // nao foi convidado. Se alguem entrar no meu espaco entre esta contagem e a
+  // transacao, o `household.delete` la embaixo esbarra na FK de `User` e a
+  // fusao inteira volta atras — o banco e a guarda de verdade.
+  const membrosDoMeu = await prisma.user.count({
+    where: { householdId: scope.householdId },
+  });
+  if (membrosDoMeu > 1) {
+    throw new ConviteInvalidoError(
+      "Saia da sua conta conjunta atual antes de aceitar outro convite"
+    );
+  }
+
+  const origemId = scope.householdId;
+  const destinoId = invite.householdId;
+
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.householdInvite.updateMany({
+      where: { id: inviteId, inviteeId: scope.userId, status: "PENDING" },
+      data: { status: "ACCEPTED", respondedAt: new Date() },
+    });
+    if (count === 0) throw new ConviteNaoEncontradoError();
+
+    await mergeHouseholds(tx, origemId, destinoId);
+
+    await tx.user.update({
+      where: { id: scope.userId },
+      data: { householdId: destinoId },
+    });
+
+    // Os convites que eu recebi de terceiros vivem sob o `householdId` deles e
+    // nao morrem na cascata do espaco que estou deixando. Sem isto eu ficaria
+    // com um convite de outra pessoa esperando resposta numa tela que ja nao
+    // faz sentido. Vem depois da guarda de proposito: antes dela, apagaria o
+    // ACCEPTED que ela acabou de escrever.
+    await tx.householdInvite.updateMany({
+      where: { inviteeId: scope.userId, status: "PENDING" },
+      data: { status: "CANCELLED", respondedAt: new Date() },
+    });
+
+    // O espaco que esvaziei. A cascata leva junto os convites que ele enviou —
+    // que a fusao ja deixou cancelados, para o caso de outro chamador dela nao
+    // apagar o espaco.
+    await tx.household.delete({ where: { id: origemId } });
+
+    await tx.notification.create({
+      data: {
+        userId: invite.inviterId,
+        title: "Convite aceito",
+        body: `${invite.inviteeEmail} entrou na sua conta conjunta. As categorias e orçamentos de vocês agora são um conjunto só.`,
+        link: LINK_CONJUNTA,
+      },
+    });
+  }, TRANSACAO_DA_FUSAO);
+
+  return getHouseholdState(await resolveScope(scope.userId));
 }
 
 /**
