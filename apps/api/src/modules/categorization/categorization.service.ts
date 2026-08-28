@@ -75,11 +75,19 @@ export async function processNewTransactions(
   // 1. Universo do pareamento: a outra ponta pode ter entrado num sync
   //    anterior, então a janela de datas manda, não o lote.
   //
-  //    Continua sendo o de **uma** pessoa, e de propósito: parear a despesa de
-  //    um membro com a receita do outro marcaria as duas como transferência
-  //    interna e as tiraria dos totais — que é justamente o modo de falhar em
-  //    silêncio que este refactor está consertando. Dinheiro que anda entre os
-  //    dois é outra pergunta, e não é esta função que a responde.
+  //    O universo é o de **uma** pessoa. É o estado atual, e não uma questão
+  //    encerrada: somar os dois membros faria o Pix de um para o outro ser
+  //    reconhecido como o que ele é, movimento interno. Hoje ele entra no
+  //    relatório do casal como despesa de um **e** receita do outro, inflando os
+  //    gastos do mês num evento em que nenhum dinheiro saiu do espaço.
+  //
+  //    O que segura a mudança é o risco de falso positivo: o pareamento decide
+  //    por valor e data, e somar os membros alarga o conjunto de candidatos — duas
+  //    transações sem relação nenhuma, de mesmo valor, na mesma janela de três
+  //    dias, passariam a poder casar. O risco já existe entre as contas de uma
+  //    pessoa só, onde foi aceito; entre membros ele é maior porque o conjunto é.
+  //    Contar ou não o dinheiro que anda entre os dois é decisão de produto, e
+  //    até ela vir fica assim.
   const datas = novas.map((t) => t.date.getTime());
   const universo = await prisma.transaction.findMany({
     where: {
