@@ -9,6 +9,7 @@ import {
   acceptInvite,
   declineInvite,
   cancelInvite,
+  leaveHousehold,
 } from "./household.service";
 
 export const householdRouter = Router();
@@ -55,5 +56,13 @@ householdRouter.delete(
   "/invites/:id",
   asyncHandler(async (req, res) => {
     res.json(await cancelInvite(req.scope!, req.params.id));
+  })
+);
+
+householdRouter.post(
+  "/leave",
+  asyncHandler(async (req, res) => {
+    const household = await leaveHousehold(req.scope!);
+    res.json({ household });
   })
 );

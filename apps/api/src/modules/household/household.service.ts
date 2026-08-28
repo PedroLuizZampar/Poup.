@@ -2,8 +2,13 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma";
 import type { HouseholdInviteDTO, HouseholdStateDTO } from "@poup/shared";
 import { resolveScope, type Scope } from "../../lib/scope";
-import { ConviteInvalidoError, ConviteNaoEncontradoError } from "../../lib/errors";
+import {
+  ConviteInvalidoError,
+  ConviteNaoEncontradoError,
+  UnprocessableError,
+} from "../../lib/errors";
 import { mergeHouseholds } from "./merge";
+import { splitHousehold } from "./split";
 
 const LINK_CONJUNTA = "/perfil#conjunta";
 
@@ -276,4 +281,70 @@ export async function cancelInvite(scope: Scope, inviteId: string) {
   if (count === 0) throw new ConviteNaoEncontradoError();
 
   return { success: true } as const;
+}
+
+/**
+ * A dissolução é maior que a fusão, e o teto de tempo acompanha.
+ *
+ * A fusão faz ~4 idas ao banco por categoria absorvida; a dissolução copia cada
+ * categoria **por membro** e religa por membro — no maior espaço real, 22
+ * categorias, um casal chega perto de 230 idas sequenciais contra um Neon
+ * remoto. Com 25 ms por ida isso é ~6 s, e um dia ruim de 100 ms ainda cabe nos
+ * 40 s. Somado ao `maxWait`, o pior caso são 48 s, abaixo dos 60 s da função da
+ * Vercel.
+ */
+const TRANSACAO_DA_DISSOLUCAO = { timeout: 40_000, maxWait: 8_000 } as const;
+
+/**
+ * Sair dissolve o espaço: cada um leva uma cópia do conjunto do casal.
+ *
+ * A guarda de verdade é a primeira escrita da transação, e não a leitura de
+ * antes. O `where` do `updateMany` carrega o estado que torna a saída válida —
+ * o espaço ainda existe e ainda tem gente nele — e o `count` diz quantos eram.
+ * É o que resolve os dois "sair" simultâneos: as duas transações começam
+ * escrevendo nas **mesmas** linhas de usuário, então a segunda espera a primeira
+ * commitar e reavalia o `where` já com os membros em espaços novos — casa zero
+ * linhas e volta atrás inteira. Um `findFirst` antes não daria isso: os dois
+ * leriam "somos dois" e os dois dissolveriam.
+ *
+ * O `data` só toca as linhas (o `updatedAt` já seria reescrito pela mudança de
+ * espaço logo adiante): o que importa aqui é o bloqueio e a contagem, não o
+ * valor. Como todas as saídas escrevem esse mesmo conjunto de linhas primeiro, e
+ * numa ordem só, não há como duas se travarem em cruz.
+ *
+ * A checagem de `memberIds` antes é atalho, não guarda: evita abrir transação
+ * para quem está sozinho e já sabe disso pela própria tela.
+ */
+export async function leaveHousehold(scope: Scope): Promise<HouseholdStateDTO> {
+  if (scope.memberIds.length < 2) {
+    // Nao ha de quem se separar, e dissolver aqui seria trocar o espaco por
+    // outro identico: trabalho e risco por nada.
+    throw new UnprocessableError("Você não está numa conta conjunta");
+  }
+
+  const antigo = scope.householdId;
+  const outros = scope.memberIds.filter((id) => id !== scope.userId);
+
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.user.updateMany({
+      where: { householdId: antigo },
+      data: { updatedAt: new Date() },
+    });
+    if (count < 2) throw new UnprocessableError("Você não está numa conta conjunta");
+
+    await splitHousehold(tx, antigo);
+
+    for (const membroId of [...outros, scope.userId]) {
+      await tx.notification.create({
+        data: {
+          userId: membroId,
+          title: "Conta conjunta desfeita",
+          body: "Cada um voltou a ter as próprias categorias, orçamentos e metas, com o histórico preservado.",
+          link: LINK_CONJUNTA,
+        },
+      });
+    }
+  }, TRANSACAO_DA_DISSOLUCAO);
+
+  return getHouseholdState(await resolveScope(scope.userId));
 }
