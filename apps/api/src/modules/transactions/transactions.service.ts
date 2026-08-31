@@ -93,6 +93,7 @@ export function formatTransactionDTO(tx: {
   competenceDate: Date;
   purchaseKey: string | null;
   compensationId: string | null;
+  userId: string;
 }): TransactionDTO {
   return {
     id: tx.id,
@@ -114,6 +115,7 @@ export function formatTransactionDTO(tx: {
     competenceDate: tx.competenceDate.toISOString(),
     purchaseKey: tx.purchaseKey,
     compensationId: tx.compensationId,
+    ownerUserId: tx.userId,
   };
 }
 

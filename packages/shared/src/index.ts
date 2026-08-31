@@ -100,6 +100,12 @@ export interface TransactionDTO {
    * de todos os totais.
    */
   compensationId: string | null;
+  /**
+   * De quem é o dinheiro. Só faz diferença em conta conjunta, e é o que a tela
+   * cruza com os membros do espaço para desenhar o avatar do dono — a API não
+   * repete nome e foto em cada linha.
+   */
+  ownerUserId: string;
 }
 
 /**

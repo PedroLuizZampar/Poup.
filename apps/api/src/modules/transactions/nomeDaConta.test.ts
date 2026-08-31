@@ -46,4 +46,12 @@ describe("nome da conta no DTO da transação", () => {
     const dto = formatTransactionDTO(transacaoCom({ name: "Nubank", customName: "   " }));
     expect(dto.accountName).toBe("Nubank");
   });
+
+  it("carrega o dono, que é quem o filtro por pessoa usa", () => {
+    const dto = formatTransactionDTO({
+      ...transacaoCom({ name: "Nubank", customName: null }),
+      userId: "bento",
+    });
+    expect(dto.ownerUserId).toBe("bento");
+  });
 });

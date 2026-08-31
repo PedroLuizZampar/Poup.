@@ -20,6 +20,7 @@ function tx(over: Partial<TransactionDTO> & { id: string }): TransactionDTO {
     competenceDate: "2026-08-17T15:37:11.000Z",
     purchaseKey: null,
     compensationId: null,
+    ownerUserId: "user-1",
     ...over,
   };
 }
