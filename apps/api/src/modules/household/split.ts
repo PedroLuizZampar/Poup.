@@ -28,10 +28,11 @@ import { Prisma } from "@prisma/client";
  *
  * A ordem das **leituras** tambem nao e livre, e por um motivo menos obvio:
  * `user.findMany` vem antes de `category.findMany` de proposito. Um
- * `acceptInvite` concorrente pode commitar entre as duas — nada impede um casal
- * de convidar uma terceira pessoa, porque o convite so checa o tamanho do espaco
- * de quem *recebe*. Nesta ordem, um aceite depois da leitura dos membros deixa o
- * novo membro apontando para o espaco antigo, e o Restrict de `User.household`
+ * `acceptInvite` concorrente pode commitar entre as duas: o convite hoje recusa
+ * espaco cheio dos dois lados, mas recusa lendo antes de escrever, sobre um
+ * `Scope` resolvido no inicio da requisicao — dois aceites simultaneos ainda
+ * pousam no mesmo espaco. Nesta ordem, um aceite depois da leitura dos membros
+ * deixa o novo membro apontando para o espaco antigo, e o Restrict de `User.household`
  * derruba a transacao inteira no `delete` — o desfecho certo. Invertidas, os
  * membros incluiriam o recem-chegado (Restrict nao dispara, o delete passa) e as
  * categorias seriam as de antes da fusao: as dele morreriam na cascata, com as

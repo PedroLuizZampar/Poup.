@@ -71,6 +71,23 @@ describe("convite para a conta conjunta", () => {
     );
   });
 
+  /**
+   * A recusa simétrica da de `acceptInvite`: o produto é para duas pessoas, e
+   * sem esta guarda um casal convidava uma terceira que entrava de verdade.
+   */
+  it("recusa convidar quando o meu espaço já tem duas pessoas", async () => {
+    const casal: Scope = {
+      userId: "ana",
+      householdId: "casa-ana",
+      memberIds: ["ana", "bento"],
+    };
+    await expect(inviteToHousehold(casal, "carla@exemplo.com")).rejects.toThrow(
+      /sua conta conjunta já tem duas pessoas/i
+    );
+    expect(userFindFirst).not.toHaveBeenCalled();
+    expect(inviteCreate).not.toHaveBeenCalled();
+  });
+
   it("compara o e-mail sem diferenciar maiúsculas", async () => {
     userFindFirst.mockResolvedValue({ id: "bento", householdId: "casa-bento" });
     await inviteToHousehold(ana, "  BENTO@Exemplo.com  ");

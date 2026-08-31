@@ -80,6 +80,15 @@ export async function inviteToHousehold(
 ): Promise<HouseholdInviteDTO> {
   const alvo = email.trim().toLowerCase();
 
+  // O meu lado tambem precisa de vaga. Sem esta guarda um casal convida uma
+  // terceira pessoa e ela entra de verdade: o produto e escrito para dois, e a
+  // dissolucao a tres vira centenas de idas sequenciais ao banco contra o teto
+  // de tempo da transacao. Vem antes da busca por e-mail de proposito: quem ja
+  // esta acompanhado nao descobre daqui se um e-mail tem conta no Poup.
+  if (scope.memberIds.length > 1) {
+    throw new ConviteInvalidoError("Sua conta conjunta já tem duas pessoas");
+  }
+
   const convidado = await prisma.user.findFirst({
     where: { email: { equals: alvo, mode: "insensitive" } },
     select: { id: true, householdId: true },
