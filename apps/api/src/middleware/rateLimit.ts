@@ -11,8 +11,9 @@ import { prisma } from "../prisma";
  * por instância, que não é limite nenhum contra quem justamente faz muitas
  * requisições em série.
  *
- * O custo é uma ida ao banco nas rotas limitadas — e só nelas, que são as duas
- * sem autenticação.
+ * O custo é uma ida ao banco nas rotas limitadas — e só nelas: as duas sem
+ * autenticação e o convite, que responde diferente por e-mail e por isso vira
+ * oráculo de quem tem conta se puder ser chamado à vontade.
  */
 
 interface RateLimitOptions {
