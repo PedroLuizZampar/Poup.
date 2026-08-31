@@ -1,0 +1,18 @@
+{
+  // O build exclui os testes, e o Vitest não checa tipos: uma fixture com o
+  // formato errado passa despercebida pelos dois — foi o que aconteceu neste
+  // projeto. Esta configuração existe só para fechar esse buraco, com
+  // `npm run typecheck:test`; o build continua com o tsconfig dele.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // O runtime dos testes é o do Vitest, não o `commonjs` do servidor: os
+    // arquivos usam `await import(...)` no topo do módulo, que só é válido em
+    // ESM. Sem isso o typecheck reclamaria do próprio jeito de escrever teste
+    // aqui, e não dos tipos.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": []
+}

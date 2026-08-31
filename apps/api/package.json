@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "typecheck:test": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },
