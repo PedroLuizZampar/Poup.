@@ -26,6 +26,7 @@ function transacaoCom(account: { name: string; customName: string | null }) {
     competenceDate: new Date("2026-08-01T00:00:00.000Z"),
     purchaseKey: null,
     compensationId: null,
+    userId: "user-1",
   };
 }
 
