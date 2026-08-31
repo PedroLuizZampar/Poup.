@@ -113,7 +113,8 @@ Poup/
 26. Dissolução de household — sair divide o espaço: cada membro recebe cópia de
     categorias, orçamentos e metas, seu histórico é repontado à sua cópia, espaço
     antigo é deletado. Meta cuja conta vinculada deixou com a outra pessoa libera
-    a conta, voltando ao estado "Vincule uma conta"
+    a conta, voltando ao estado "Vincule uma conta". Irreversível por desenho —
+    nenhum mapeamento é guardado para desfazer
 
 ### Frontend
 21. App React + Vite: roteamento e layout base
