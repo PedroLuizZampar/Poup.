@@ -119,6 +119,17 @@ export interface RegisterInput {
 }
 
 /**
+ * O cadastro não cabe nos 5 s padrão do Prisma.
+ *
+ * São ~22 idas ao banco em série dentro da transação — o espaço, o usuário e um
+ * `upsert` por categoria padrão —, contra um Neon remoto. Com 25 ms por ida
+ * sobra folga, mas 200 ms num dia ruim já estoura o teto padrão e derruba o
+ * cadastro na porta de entrada do produto. Somado ao `maxWait`, o pior caso são
+ * 20 s, bem abaixo dos 60 s da função da Vercel.
+ */
+const TRANSACAO_DO_CADASTRO = { timeout: 15_000, maxWait: 5_000 } as const;
+
+/**
  * Cria a conta e já devolve a sessão, como o login.
  *
  * As credenciais da Pluggy são conferidas com a própria Pluggy **antes** de o
@@ -176,7 +187,7 @@ export async function register(input: RegisterInput) {
     await createDefaultCategories(tx, household.id);
 
     return criado;
-  });
+  }, TRANSACAO_DO_CADASTRO);
 
   const signOptions: jwt.SignOptions = {
     expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
