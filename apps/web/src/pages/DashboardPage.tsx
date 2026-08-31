@@ -37,6 +37,7 @@ import { SyncButton } from "../components/sync/SyncButton";
 import { notifySuggestionsChanged } from "../hooks/useSuggestionsCount";
 import { useMonthNavigation } from "../hooks/useMonthNavigation";
 import { useCurrentUser } from "../hooks/useCurrentUser";
+import { OwnerFilter, ownerParaQuery } from "../components/ui/OwnerFilter";
 import { summarizeAccounts } from "../lib/accounts";
 import { contagem, formatCurrency, formatDate } from "../lib/format";
 import { formatMonthShort } from "../lib/date";
@@ -49,9 +50,11 @@ const FLOW_CHART_MONTHS = 3;
 
 export function DashboardPage() {
   const user = useCurrentUser();
+  const membros = user.household.members;
   const month = useMonthNavigation();
   const { categoryMap } = useCategories();
 
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [summary, setSummary] = useState<ReportSummaryDTO | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<TransactionDTO[]>([]);
   const [accounts, setAccounts] = useState<AccountDTO[]>([]);
@@ -76,9 +79,12 @@ export function DashboardPage() {
   async function loadDashboard() {
     try {
       setLoading(true);
+      // Ignora a seleção quando o espaço voltou a ser de uma pessoa só: um id
+      // que já não está no espaço faz a API recusar com 403.
+      const owner = membros.length > 1 ? ownerParaQuery(ownerFilter) : undefined;
       const [reportSummary, txs, bdg, gls, accs] = await Promise.all([
-        fetchReportSummary({ month: month.month, history: FLOW_CHART_MONTHS }),
-        fetchTransactions({ month: month.month, limit: RECENT_TRANSACTIONS_LIMIT }),
+        fetchReportSummary({ month: month.month, history: FLOW_CHART_MONTHS, owner }),
+        fetchTransactions({ month: month.month, limit: RECENT_TRANSACTIONS_LIMIT, owner }),
         fetchBudgets(month.month).catch(() => []),
         fetchGoals().catch(() => []),
         fetchAccounts().catch(() => []),
@@ -170,7 +176,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     loadDashboard();
-  }, [month.month]);
+  }, [month.month, ownerFilter]);
 
   const accountTotals = useMemo(() => summarizeAccounts(accounts), [accounts]);
 
@@ -239,6 +245,11 @@ export function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3 min-w-0">
+          {membros.length > 1 && (
+            <div className="w-28 shrink-0">
+              <OwnerFilter size="sm" members={membros} value={ownerFilter} onChange={setOwnerFilter} />
+            </div>
+          )}
           <SuggestionsButton />
           <SyncButton
             onIncremental={handleSyncAccounts}

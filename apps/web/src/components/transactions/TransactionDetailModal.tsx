@@ -19,6 +19,9 @@ import { InstallmentList } from "./InstallmentList";
 import { useCategoryMap } from "../../hooks/useCategories";
 import { displayCategory } from "../../lib/categories";
 import { Money } from "../ui/Money";
+import { donoDaLinha } from "../ui/OwnerFilter";
+import { UserAvatar } from "../ui/UserAvatar";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 
 interface TransactionDetailModalProps {
   transaction: TransactionDTO | null;
@@ -52,6 +55,11 @@ export function TransactionDetailModal({
   /** As duas pontas do vínculo, quando esta transação está compensada. */
   const [compensacao, setCompensacao] = useState<CompensationDetailDTO | null>(null);
   const toast = useToast();
+  // O modal está sempre sob o `AppLayout` — é `TransactionsPage` quem o abre,
+  // e ela já vive dentro do `Outlet` que carrega o contexto do usuário — então
+  // dá para ler os membros do espaço direto daqui, sem precisar de mais uma
+  // prop repetindo o que a página já tem.
+  const membros = useCurrentUser().household.members;
 
   useEffect(() => {
     if (transaction) {
@@ -245,8 +253,16 @@ export function TransactionDetailModal({
               <span className="text-xs font-semibold text-text-primary block tnum">
                 {formatDate(transaction.date)}
               </span>
-              <span className="text-[11px] text-text-secondary truncate block">
-                {transaction.accountName || "Conta principal"}
+              <span className="flex items-center gap-1.5 min-w-0">
+                {(() => {
+                  const dono = donoDaLinha(membros, transaction.ownerUserId);
+                  return dono ? (
+                    <UserAvatar size="xs" name={dono.name} avatarUrl={dono.avatarUrl} />
+                  ) : null;
+                })()}
+                <span className="text-[11px] text-text-secondary truncate">
+                  {transaction.accountName || "Conta principal"}
+                </span>
               </span>
             </div>
           </div>

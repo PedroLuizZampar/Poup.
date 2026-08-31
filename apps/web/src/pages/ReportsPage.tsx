@@ -10,6 +10,8 @@ import { CardSkeleton } from "../components/common/Skeleton";
 import { EmptyState } from "../components/common/EmptyState";
 import { CategoryTile, normalizeColorKey } from "../components/ui/CategoryTile";
 import { Select } from "../components/ui/Select";
+import { OwnerFilter, ownerParaQuery } from "../components/ui/OwnerFilter";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { formatPercent } from "../lib/format";
 import { Money } from "../components/ui/Money";
 
@@ -25,9 +27,13 @@ const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
 ];
 
 export function ReportsPage() {
+  const user = useCurrentUser();
+  const membros = user.household.members;
+
   const [summary, setSummary] = useState<ReportSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<ReportPeriod>("current");
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
 
   /**
    * Um pedido por período, com os totais já somados no banco. A página baixava
@@ -40,7 +46,10 @@ export function ReportsPage() {
     async function loadData() {
       try {
         setLoading(true);
-        const result = await fetchReportSummary({ period });
+        // Ignora a seleção quando o espaço voltou a ser de uma pessoa só: um id
+        // que já não está no espaço faz a API recusar com 403.
+        const owner = membros.length > 1 ? ownerParaQuery(ownerFilter) : undefined;
+        const result = await fetchReportSummary({ period, owner });
         if (!cancelled) setSummary(result);
       } catch (err) {
         console.error("Erro ao carregar relatórios:", err);
@@ -54,7 +63,7 @@ export function ReportsPage() {
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, ownerFilter, membros.length]);
 
   const totalIncome = summary?.income ?? 0;
   const totalExpense = summary?.expense ?? 0;
@@ -114,13 +123,20 @@ export function ReportsPage() {
           </p>
         </div>
 
-        <div className="w-full sm:w-52">
-          <Select
-            size="sm"
-            value={period}
-            onChange={(val) => setPeriod(val as ReportPeriod)}
-            options={PERIOD_OPTIONS}
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          {membros.length > 1 && (
+            <div className="w-full sm:w-40">
+              <OwnerFilter size="sm" members={membros} value={ownerFilter} onChange={setOwnerFilter} />
+            </div>
+          )}
+          <div className="w-full sm:w-52">
+            <Select
+              size="sm"
+              value={period}
+              onChange={(val) => setPeriod(val as ReportPeriod)}
+              options={PERIOD_OPTIONS}
+            />
+          </div>
         </div>
       </div>
 

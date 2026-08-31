@@ -13,10 +13,13 @@ import { Modal } from "../components/ui/Modal";
 import { Field } from "../components/ui/Field";
 import { CurrencyInput } from "../components/ui/CurrencyInput";
 import { InstitutionLogo } from "../components/ui/InstitutionLogo";
+import { OwnerFilter, donoDaLinha, ownerParaQuery } from "../components/ui/OwnerFilter";
+import { UserAvatar } from "../components/ui/UserAvatar";
 import { TransactionDetailModal } from "../components/transactions/TransactionDetailModal";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useCategoryMap } from "../hooks/useCategories";
 import { displayCategory } from "../lib/categories";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { SuggestionsButton } from "../components/suggestions/SuggestionsButton";
 import { Money } from "../components/ui/Money";
 import { InstallmentBadge } from "../components/transactions/InstallmentBadge";
@@ -70,6 +73,9 @@ export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isUncategorizedParam = searchParams.get("uncategorized") === "true";
 
+  const user = useCurrentUser();
+  const membros = user.household.members;
+
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [accounts, setAccounts] = useState<AccountDTO[]>([]);
@@ -83,6 +89,7 @@ export function TransactionsPage() {
     isUncategorizedParam ? "UNCATEGORIZED" : "ALL"
   );
   const [accountFilter, setAccountFilter] = useState<string>("ALL");
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
   /** Intervalo de datas, "YYYY-MM-DD". String vazia = sem limite. */
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -161,6 +168,9 @@ export function TransactionsPage() {
           categoryId: actualCatId,
           uncategorized: isUncat || undefined,
           accountId: accountFilter === "ALL" ? undefined : accountFilter,
+          // Ignora a seleção quando o espaço voltou a ser de uma pessoa só: um
+          // id que já não está no espaço faz a API recusar com 403.
+          owner: membros.length > 1 ? ownerParaQuery(ownerFilter) : undefined,
           startDate: dateRangeInvalid ? undefined : startDate || undefined,
           endDate: dateRangeInvalid ? undefined : endDate || undefined,
           minAmount:
@@ -189,6 +199,7 @@ export function TransactionsPage() {
     typeFilter,
     categoryFilter,
     accountFilter,
+    ownerFilter,
     startDate,
     endDate,
     debouncedMinAmount,
@@ -244,18 +255,25 @@ export function TransactionsPage() {
   const hasDateFilter = Boolean(startDate || endDate);
   const hasAmountFilter = minAmount > 0 || maxAmount > 0;
 
+  // O filtro de pessoa só conta enquanto o seletor existe na tela — sozinho ele
+  // já não aparece, e uma seleção presa de quando havia dois membros não deve
+  // acender "Limpar todos" para um filtro que ninguém mais consegue ver.
+  const hasOwnerFilter = membros.length > 1 && ownerFilter !== "all";
+
   // Checagem de filtros ativos
   const hasActiveFilters =
     debouncedSearch !== "" ||
     typeFilter !== "ALL" ||
     categoryFilter !== "ALL" ||
     accountFilter !== "ALL" ||
+    hasOwnerFilter ||
     hasDateFilter ||
     hasAmountFilter;
 
   /** Tudo menos a busca, que tem afordância própria e não entra na conta. */
   const sheetFilterCount =
     [typeFilter, categoryFilter, accountFilter].filter((f) => f !== "ALL").length +
+    (hasOwnerFilter ? 1 : 0) +
     (hasDateFilter ? 1 : 0) +
     (hasAmountFilter ? 1 : 0);
 
@@ -263,6 +281,7 @@ export function TransactionsPage() {
     setTypeFilter("ALL");
     setCategoryFilter("ALL");
     setAccountFilter("ALL");
+    setOwnerFilter("all");
     clearDateFilter();
     clearAmountFilter();
     setSearchParams({});
@@ -411,6 +430,14 @@ export function TransactionsPage() {
   const filterFields = (
     <div className="flex flex-col gap-4">
       <Field label="Conta">{accountSelect}</Field>
+      {/* Só existe quando o espaço tem mais de um membro — o próprio
+          `OwnerFilter` decide isso, mas o `Field` que o envolve teria de
+          aparecer com o rótulo mesmo vazio se não checássemos aqui também. */}
+      {membros.length > 1 && (
+        <Field label="Pessoa">
+          <OwnerFilter members={membros} value={ownerFilter} onChange={setOwnerFilter} />
+        </Field>
+      )}
       <Field label="Tipo">{typeSelect}</Field>
       <Field label="Categoria">{categorySelect}</Field>
       <Field
@@ -570,6 +597,22 @@ export function TransactionsPage() {
                   type="button"
                   onClick={() => setAccountFilter("ALL")}
                   aria-label="Remover filtro de conta"
+                  className="tap-target hover:text-error ml-1 shrink-0"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {hasOwnerFilter && (
+              <span className="px-2 py-0.5 rounded-chip bg-surface-alt border border-border text-text-primary flex items-center gap-1 max-w-full">
+                <span className="truncate">
+                  Pessoa: {membros.find((m) => m.id === ownerFilter)?.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOwnerFilter("all")}
+                  aria-label="Remover filtro de pessoa"
                   className="tap-target hover:text-error ml-1 shrink-0"
                 >
                   ✕
@@ -750,11 +793,19 @@ export function TransactionsPage() {
                       </div>
 
                       <div className="flex items-baseline justify-between gap-3 pl-10">
-                        <span className="text-caption text-text-secondary truncate tnum">
-                          {formatDate(tx.date)}{" "}
-                          <span aria-hidden="true">·</span>{" "}
-                          {tx.accountName || "Principal"}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0 text-caption text-text-secondary tnum">
+                          {(() => {
+                            const dono = donoDaLinha(membros, tx.ownerUserId);
+                            return dono ? (
+                              <UserAvatar size="xs" name={dono.name} avatarUrl={dono.avatarUrl} />
+                            ) : null;
+                          })()}
+                          <span className="truncate">
+                            {formatDate(tx.date)}{" "}
+                            <span aria-hidden="true">·</span>{" "}
+                            {tx.accountName || "Principal"}
+                          </span>
+                        </div>
                         <span
                           className={`font-display font-bold text-sm shrink-0 tnum ${
                             tx.type === "INCOME" ? "text-income" : "text-expense"
@@ -851,8 +902,14 @@ export function TransactionsPage() {
                         </td>
 
                         <td className="py-3.5 px-6 text-text-secondary text-caption max-w-[140px]">
-                          <span className="block truncate">
-                            {tx.accountName || "Principal"}
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            {(() => {
+                              const dono = donoDaLinha(membros, tx.ownerUserId);
+                              return dono ? (
+                                <UserAvatar size="xs" name={dono.name} avatarUrl={dono.avatarUrl} />
+                              ) : null;
+                            })()}
+                            <span className="truncate">{tx.accountName || "Principal"}</span>
                           </span>
                         </td>
 
