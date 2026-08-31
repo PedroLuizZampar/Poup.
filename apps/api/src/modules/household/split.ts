@@ -120,6 +120,18 @@ export async function splitHousehold(
       data: { accountId: null },
     });
 
+    // A transacao tem o mesmo problema e nao tem a mesma saida. Qualquer membro
+    // pode lancar na conta de qualquer outro (`createTransaction` aceita
+    // qualquer conta de `scope.memberIds`), entao depois da separacao sobram
+    // linhas minhas apontando para a conta que foi com o outro. Mas
+    // `Transaction.accountId` e obrigatorio e a relacao e `onDelete: Cascade`:
+    // nao ha estado orfao para onde soltar, como a meta acima tem. As tres
+    // saidas possiveis sao piores que o problema — mover a conta levaria o
+    // extrato inteiro do dono junto, copiar a conta inventaria saldo em dobro, e
+    // apagar a transacao apagaria historico que a pessoa quis registrar. Fica
+    // como esta, com o preco conhecido: no dia em que o outro desconectar aquele
+    // item, essas linhas somem na cascata.
+
     await tx.user.update({
       where: { id: membro.id },
       data: { householdId: novo.id },
