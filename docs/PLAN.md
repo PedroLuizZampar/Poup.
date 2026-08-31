@@ -102,9 +102,16 @@ Poup/
 24. Convite de conta conjunta — quatro rotas sob `/api/household`: `state`
     (estado atual), `invite` (enviar convite), `decline` (recusar), `cancel`
     (cancelar convite), mais `accept` e `leave`. Validação: e-mail inexistente,
-    e-mail próprio, pessoa já num espaço com mais de um membro, pessoa já no seu
-    household, convite duplicado. Índice único parcial no banco garante um
-    convite pendente por par
+    e-mail próprio, pessoa já num espaço com mais de um membro, **seu próprio
+    espaço já com dois membros**, pessoa já no seu household, convite duplicado.
+    Índice único parcial no banco garante um convite pendente por par —
+    `HouseholdInvite_pendente_por_par`, escrito à mão em
+    `prisma/migrations/20260827194103_conta_conjunta/migration.sql` porque o PSL
+    não tem sintaxe para índice parcial (`WHERE`). Ele não existe no
+    `schema.prisma`, e é a única coisa que barra dois convites simultâneos para
+    o mesmo par: **toda migração gerada depois precisa recriá-lo à mão** —
+    `prisma migrate dev` compara com o schema, não vê o índice ali e emite um
+    `DROP INDEX` para ele
 25. Fusão de households — aceitar convite mescla os espaços: categorias são
     pareadas por `systemKey` ou nome normalizado (acentuação, maiúsculas e
     espaços ignorados), orçamentos somados com `Prisma.Decimal`, transações e
@@ -246,7 +253,7 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 | Guardar os eventos de webhook recebidos | Evento perdido só chega no próximo sync |
 | Pluggy Payments (ITP) | Poup lê; não inicia pagamento |
 | Conta conjunta: convite para não-usuário | Limitado a e-mail de usuário existente no app |
-| Conta conjunta: mais de dois membros na interface | UI desenhada para dois; nenhuma barreira previne terceiro usuário de se juntar |
+| Conta conjunta: mais de dois membros na interface | UI desenhada para dois, e o convite agora recusa os dois lados cheios; o modelo continua sem teto |
 | Transferências intra-household em relatórios | Contadas duas vezes — como despesa de um e renda do outro — porque pareamento de transferência ainda é dentro da própria pessoa |
 | Papéis e permissões diferenciadas | Sem papéis; todos os membros têm permissões iguais no household |
 
