@@ -46,9 +46,7 @@ export function ReportsPage() {
     async function loadData() {
       try {
         setLoading(true);
-        // Ignora a seleção quando o espaço voltou a ser de uma pessoa só: um id
-        // que já não está no espaço faz a API recusar com 403.
-        const owner = membros.length > 1 ? ownerParaQuery(ownerFilter) : undefined;
+        const owner = ownerParaQuery(membros, ownerFilter);
         const result = await fetchReportSummary({ period, owner });
         if (!cancelled) setSummary(result);
       } catch (err) {

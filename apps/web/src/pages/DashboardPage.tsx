@@ -79,9 +79,7 @@ export function DashboardPage() {
   async function loadDashboard() {
     try {
       setLoading(true);
-      // Ignora a seleção quando o espaço voltou a ser de uma pessoa só: um id
-      // que já não está no espaço faz a API recusar com 403.
-      const owner = membros.length > 1 ? ownerParaQuery(ownerFilter) : undefined;
+      const owner = ownerParaQuery(membros, ownerFilter);
       const [reportSummary, txs, bdg, gls, accs] = await Promise.all([
         fetchReportSummary({ month: month.month, history: FLOW_CHART_MONTHS, owner }),
         fetchTransactions({ month: month.month, limit: RECENT_TRANSACTIONS_LIMIT, owner }),

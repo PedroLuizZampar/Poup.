@@ -168,9 +168,7 @@ export function TransactionsPage() {
           categoryId: actualCatId,
           uncategorized: isUncat || undefined,
           accountId: accountFilter === "ALL" ? undefined : accountFilter,
-          // Ignora a seleção quando o espaço voltou a ser de uma pessoa só: um
-          // id que já não está no espaço faz a API recusar com 403.
-          owner: membros.length > 1 ? ownerParaQuery(ownerFilter) : undefined,
+          owner: ownerParaQuery(membros, ownerFilter),
           startDate: dateRangeInvalid ? undefined : startDate || undefined,
           endDate: dateRangeInvalid ? undefined : endDate || undefined,
           minAmount:
@@ -797,7 +795,12 @@ export function TransactionsPage() {
                           {(() => {
                             const dono = donoDaLinha(membros, tx.ownerUserId);
                             return dono ? (
-                              <UserAvatar size="xs" name={dono.name} avatarUrl={dono.avatarUrl} />
+                              <UserAvatar
+                                size="xs"
+                                name={dono.name}
+                                avatarUrl={dono.avatarUrl}
+                                aria-label={dono.name}
+                              />
                             ) : null;
                           })()}
                           <span className="truncate">
@@ -906,7 +909,12 @@ export function TransactionsPage() {
                             {(() => {
                               const dono = donoDaLinha(membros, tx.ownerUserId);
                               return dono ? (
-                                <UserAvatar size="xs" name={dono.name} avatarUrl={dono.avatarUrl} />
+                                <UserAvatar
+                                  size="xs"
+                                  name={dono.name}
+                                  avatarUrl={dono.avatarUrl}
+                                  aria-label={dono.name}
+                                />
                               ) : null;
                             })()}
                             <span className="truncate">{tx.accountName || "Principal"}</span>

@@ -28,11 +28,28 @@ describe("donoDaLinha", () => {
 });
 
 describe("ownerParaQuery", () => {
+  const eu = membro({ id: "eu" });
+  const parceiro = membro({ id: "parceiro" });
+
   it("\"all\" vira ausente — é assim que a API soma o espaço inteiro", () => {
-    expect(ownerParaQuery("all")).toBeUndefined();
+    expect(ownerParaQuery([eu, parceiro], "all")).toBeUndefined();
   });
 
   it("qualquer outro valor segue como o id do membro escolhido", () => {
-    expect(ownerParaQuery("membro-1")).toBe("membro-1");
+    expect(ownerParaQuery([eu, parceiro], "parceiro")).toBe("parceiro");
+  });
+
+  it("some quando o espaço voltou a ser de uma pessoa só, mesmo com uma seleção presa", () => {
+    // O caso do 403: alguém saiu do espaço, e a tela ainda guarda a escolha de
+    // antes. `ownerFilter` não muda sozinho — é este guard que impede o id de
+    // quem já não está no espaço de chegar na API.
+    expect(ownerParaQuery([eu], "parceiro")).toBeUndefined();
+  });
+
+  it("um espaço de três ou mais membros também filtra normalmente", () => {
+    // Nada no modelo trava o espaço em dois membros — o guard é `< 2`, não
+    // `!== 2`, e continua deixando passar a seleção em qualquer tamanho maior.
+    const terceiro = membro({ id: "terceiro" });
+    expect(ownerParaQuery([eu, parceiro, terceiro], "terceiro")).toBe("terceiro");
   });
 });

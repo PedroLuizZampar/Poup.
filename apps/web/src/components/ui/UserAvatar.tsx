@@ -7,6 +7,14 @@ export interface UserAvatarProps {
   avatarUrl?: string | null;
   size?: UserAvatarSize;
   className?: string;
+  /**
+   * Nome anunciado por leitor de tela. Fica de fora por padrão porque a
+   * maioria dos usos põe o nome como texto visível ao lado — repetir aí
+   * duplicaria a leitura. Só entra onde o avatar é o único indício de quem é
+   * o dono, como a linha da transação: sem isto, um usuário de leitor de tela
+   * não tem como saber de quem é aquela linha.
+   */
+  "aria-label"?: string;
 }
 
 const sizeClasses: Record<UserAvatarSize, string> = {
@@ -32,7 +40,13 @@ export function getInitials(name: string): string {
  * Foto de perfil do usuário, com as iniciais como fallback — usada quando não há
  * foto e também quando a imagem salva não carrega.
  */
-export function UserAvatar({ name, avatarUrl, size = "md", className = "" }: UserAvatarProps) {
+export function UserAvatar({
+  name,
+  avatarUrl,
+  size = "md",
+  className = "",
+  "aria-label": ariaLabel,
+}: UserAvatarProps) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -43,6 +57,8 @@ export function UserAvatar({ name, avatarUrl, size = "md", className = "" }: Use
 
   return (
     <div
+      role={ariaLabel ? "img" : undefined}
+      aria-label={ariaLabel}
       className={`${sizeClasses[size]} rounded-full overflow-hidden bg-primary-soft text-primary font-display font-extrabold flex items-center justify-center select-none shrink-0 ${className}`}
     >
       {showImage ? (

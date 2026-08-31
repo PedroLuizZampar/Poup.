@@ -257,7 +257,12 @@ export function TransactionDetailModal({
                 {(() => {
                   const dono = donoDaLinha(membros, transaction.ownerUserId);
                   return dono ? (
-                    <UserAvatar size="xs" name={dono.name} avatarUrl={dono.avatarUrl} />
+                    <UserAvatar
+                      size="xs"
+                      name={dono.name}
+                      avatarUrl={dono.avatarUrl}
+                      aria-label={dono.name}
+                    />
                   ) : null;
                 })()}
                 <span className="text-[11px] text-text-secondary truncate">

@@ -33,11 +33,23 @@ export function donoDaLinha(
 }
 
 /**
- * O valor de `ownerFilter` do estado da tela, como a API espera receber.
- * "all" é a seleção padrão e soma o espaço inteiro — a API só sabe fazer isso
- * quando o parâmetro está ausente, não quando ele chega como a string "all".
+ * O `owner` que vai para a API, cruzando a seleção da tela com o tamanho atual
+ * do espaço — e não só a seleção sozinha.
+ *
+ * "all" é o padrão e soma o espaço inteiro, o que a API só sabe fazer quando o
+ * parâmetro está ausente, nunca quando ele chega como a string "all". E um
+ * espaço que voltou a ser de uma pessoa só sempre soma undefined, não importa
+ * o que `ownerFilter` ainda guarde: é o caso de alguém sair de um espaço
+ * enquanto a tela de outra pessoa ainda tinha esse alguém selecionado — sem
+ * essa segunda checagem, o id selecionado não pertence mais a ninguém do
+ * espaço e a API recusa com 403. `members.length` (não `=== 2`) porque nada
+ * no modelo impede um espaço com três ou mais membros.
  */
-export function ownerParaQuery(ownerFilter: string): string | undefined {
+export function ownerParaQuery(
+  members: HouseholdMemberDTO[],
+  ownerFilter: string
+): string | undefined {
+  if (members.length < 2) return undefined;
   return ownerFilter === "all" ? undefined : ownerFilter;
 }
 
