@@ -2,7 +2,8 @@
 
 App web de finanças pessoais, instalável como PWA. Importa as movimentações do
 banco via Open Finance (Pluggy), categoriza as despesas — com palpite do próprio
-histórico — e mostra para onde o dinheiro foi.
+histórico — e mostra para onde o dinheiro foi. Duas pessoas podem dividir a
+visão financeira num espaço conjunto.
 
 ## Stack
 

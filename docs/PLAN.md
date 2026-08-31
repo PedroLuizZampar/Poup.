@@ -90,6 +90,30 @@ Poup/
     sync, reparo e webhook não têm como desfazê-lo; desfazer é a pessoa quem
     faz, por qualquer uma das pontas
     (`GET|POST|DELETE /transactions/:id/compensation`)
+22. Conta conjunta: modelo de posse — `Household` como dono de `Category`,
+    `Budget` e `Goal`, criado automaticamente para cada usuário no cadastro.
+    `Item`, `Account`, `Transaction`, `CreditCardBill`, `CategorySuggestion` e
+    `Notification` mantêm `userId` como dono. Leitura agrega o household via
+    `userId: { in: memberIds }` do espaço do usuário
+23. Escopo por requisição — middleware `withScope` resolve `Scope { userId,
+    householdId, memberIds }` uma vez por request e substitui parâmetro `userId`
+    nos serviços. `ownerIds(scope, owner?)` traduz filtro de pessoa em ids e
+    devolve 403 para quem não está no household
+24. Convite de conta conjunta — quatro rotas sob `/api/household`: `state`
+    (estado atual), `invite` (enviar convite), `decline` (recusar), `cancel`
+    (cancelar convite), mais `accept` e `leave`. Validação: e-mail inexistente,
+    e-mail próprio, pessoa já num espaço com mais de um membro, pessoa já no seu
+    household, convite duplicado. Índice único parcial no banco garante um
+    convite pendente por par
+25. Fusão de households — aceitar convite mescla os espaços: categorias são
+    pareadas por `systemKey` ou nome normalizado (acentuação, maiúsculas e
+    espaços ignorados), orçamentos somados com `Prisma.Decimal`, transações e
+    sugestões repontadas. Metas vão com o criador. Irreversível por desenho —
+    nenhum mapeamento é guardado para desfazer
+26. Dissolução de household — sair divide o espaço: cada membro recebe cópia de
+    categorias, orçamentos e metas, seu histórico é repontado à sua cópia, espaço
+    antigo é deletado. Meta cuja conta vinculada deixou com a outra pessoa libera
+    a conta, voltando ao estado "Vincule uma conta"
 
 ### Frontend
 21. App React + Vite: roteamento e layout base
@@ -143,57 +167,62 @@ Poup/
     ninguém tinha adivinhado. "Sem categoria definida" é sempre a última página:
     lá nada vem pré-marcado, você escolhe uma categoria e aplica às marcadas, ou
     dispensa as que não quer decidir
+34. Filtro por pessoa em transações, Dashboard e Relatórios — aparece e funciona
+    apenas quando o household tem mais de um membro. Cada linha de transação
+    mostra avatar do dono quando há múltiplos membros
+35. Seção de conta conjunta em Perfil (`/perfil#conjunta`) — convite por e-mail,
+    aceitação, rejeição, cancelamento e saída do household
 
 ### Mobile
-34. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
+36. Barra de navegação inferior abaixo de 768px, com cinco abas e safe area — sem
     ela nenhuma rota era alcançável no celular a não ser digitando a URL
-35. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
+37. Modais, `Select` e painel de notificações viram folhas ancoradas no rodapé no
     toque, e a tabela de transações vira lista de cards
-36. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
+38. Campos a 16px sob `pointer: coarse` (o limiar do zoom automático do Safari),
     alvos de toque de 44px via `.tap-target`, `dvh` no lugar de `vh`
-37. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
+39. Tema segue `prefers-color-scheme` enquanto não houver escolha salva
 
 ### PWA
-38. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
+40. `vite-plugin-pwa` com Workbox: precache da casca (HTML, JS, CSS, fontes,
     ícones) e **`NetworkOnly` para `/api/*`** — saldo servido do cache sem aviso
     é pior que tela vazia
-39. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
+41. Manifest, ícones 192/512, um 512 `maskable` e `apple-touch-icon`, gerados a
     partir do `Logo.tsx`
-40. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
+42. Fontes self-hosted (`@fontsource`), só os subsets latinos: sai o
     render-block do CDN do Google e entra fonte precacheável
-41. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
+43. Botão "Instalar o Poup" em Perfil (`beforeinstallprompt`), com as instruções
     manuais do iOS quando não há prompt; banner de versão nova em vez de recarga
     automática
-42. Tela de sem conexão honesta, e sessão preservada quando o servidor não
+44. Tela de sem conexão honesta, e sessão preservada quando o servidor não
     responde — falha de rede deixou de ser tratada como sessão expirada
-43. Sinal da transação vindo do `type` da Pluggy, e não do sinal do valor —
+45. Sinal da transação vindo do `type` da Pluggy, e não do sinal do valor —
     devolução em cartão parou de ser lançada como despesa
-44. Parcelas estruturadas (`installmentIndex`, `installmentTotal`, `billMonth`)
+46. Parcelas estruturadas (`installmentIndex`, `installmentTotal`, `billMonth`)
     vindas do `creditCardMetadata`, com o número da parcela na lista e no
     detalhe
-45. Data de vencimento da parcela, derivada na leitura do mês da fatura mais o
+47. Data de vencimento da parcela, derivada na leitura do mês da fatura mais o
     dia cadastrado no cartão — mudar o dia reajusta todas as parcelas
-46. Classificação de conta em duas colunas: o tipo que a Pluggy deriva e o
+48. Classificação de conta em duas colunas: o tipo que a Pluggy deriva e o
     rótulo que o usuário escolhe, incluindo "Cartão de débito", que a Pluggy
     não tem
-47. Poupança nasce fora dos cards de saldo; o olhinho do Perfil a traz de volta
-48. Dia de vencimento da fatura por conta de crédito, semeado do
+49. Poupança nasce fora dos cards de saldo; o olhinho do Perfil a traz de volta
+50. Dia de vencimento da fatura por conta de crédito, semeado do
     `balanceDueDate` da Pluggy e obrigatório na edição (padrão 10)
-49. Reparo do histórico já importado, uma conta por requisição — só reescreve o
+51. Reparo do histórico já importado, uma conta por requisição — só reescreve o
     que existe, não importa transação nova
-50. Competência: cada transação sabe em que mês ela **conta**, e é por ela que
+52. Competência: cada transação sabe em que mês ela **conta**, e é por ela que
     relatórios, orçamentos e a lista mensal somam — uma compra em 10x deixou de
     pesar inteira no mês da compra
-51. Vencimento da parcela deslocado pelo número dela (`billForecastDate` vale
+53. Vencimento da parcela deslocado pelo número dela (`billForecastDate` vale
     para a primeira; cada seguinte anda um mês) e postergado ao próximo dia
     útil, com feriados nacionais calculados da Páscoa
-52. Parcelas de uma mesma compra reunidas num dropdown, ordenadas, com o total
+54. Parcelas de uma mesma compra reunidas num dropdown, ordenadas, com o total
     da compra no fim
-53. Faturas do cartão importadas da Pluggy (`CreditCardBill`), com vencimento,
+55. Faturas do cartão importadas da Pluggy (`CreditCardBill`), com vencimento,
     fechamento, total e o pagamento que a instituição reporta
-54. Pagamento de fatura reconhecido na conta corrente e categorizado como
+56. Pagamento de fatura reconhecido na conta corrente e categorizado como
     transferência — a despesa do cartão parou de contar duas vezes
-55. Webhook da Pluggy: `transactions/updated` resolve o vínculo com a fatura na
+57. Webhook da Pluggy: `transactions/updated` resolve o vínculo com a fatura na
     hora, `transactions/created` avisa que há novidade na conexão
 
 ## Backlog (planejado, **não** implementado)
@@ -215,6 +244,10 @@ Estes itens já apareceram como concluídos neste documento sem existirem no có
 | Parcela em lançamento manual | Os três campos só são escritos pelo sync, e a competência de lançamento manual é sempre a própria data |
 | Guardar os eventos de webhook recebidos | Evento perdido só chega no próximo sync |
 | Pluggy Payments (ITP) | Poup lê; não inicia pagamento |
+| Conta conjunta: convite para não-usuário | Limitado a e-mail de usuário existente no app |
+| Conta conjunta: mais de dois membros na interface | UI desenhada para dois; nenhuma barreira previne terceiro usuário de se juntar |
+| Transferências intra-household em relatórios | Contadas duas vezes — como despesa de um e renda do outro — porque pareamento de transferência ainda é dentro da própria pessoa |
+| Papéis e permissões diferenciadas | Sem papéis; todos os membros têm permissões iguais no household |
 
 Outros pendentes conhecidos:
 
